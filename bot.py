@@ -46,11 +46,11 @@ CANDLE_OPTIONS = [
 def get_main_markup(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     
-    # الشريط الأول: تشغيل تلقائي وإيقاف تلقائي مدموجان
+    # الشريط الأول: تشغيل تلقائي وإيقاف تلقائي جنب بعض
     btn_auto = types.KeyboardButton('تشغيل تلقائي')
     btn_stop_auto = types.KeyboardButton('إيقاف تلقائي')
     
-    # الشريط الثاني: أوتوماتيكي وزر الإحصائيات (زر ربح وخسارة)
+    # الشريط الثاني: أوتوماتيكي والإحصائيات جنب بعض
     btn_manual = types.KeyboardButton('أوتوماتيكي')
     btn_stats = types.KeyboardButton('📊 الإحصائيات')
     
@@ -59,7 +59,7 @@ def get_main_markup(chat_id):
     rev_btn_text = "🔄 العكس: مفعل 🟢" if is_rev else "🔄 العكس: متوقف 🔴"
     btn_rev = types.KeyboardButton(rev_btn_text)
     
-    # الشريط الرابع: أزرار تسجيل النتيجة
+    # الشريط الرابع: ربح وخسارة
     btn_win = types.KeyboardButton('✅ ربح')
     btn_loss = types.KeyboardButton('❌ خسارة')
     
@@ -103,7 +103,7 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم تحديث الأزرار وترتيبها بنجاح.", reply_markup=get_main_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط الأزرار بالشكل المطلوب تماماً.", reply_markup=get_main_markup(message.chat.id))
 
 @bot.message_handler(func=lambda message: '🔄 العكس:' in message.text)
 def toggle_reverse_mode(message):
