@@ -43,30 +43,24 @@ CANDLE_OPTIONS = [
     'شمعة حمراء 1', 'شمعة حمراء 2', 'شمعة حمراء 3'
 ]
 
-def get_main_markup(chat_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    
-    # الشريط الأول: تشغيل تلقائي وإيقاف تلقائي جنب بعض
-    btn_auto = types.KeyboardButton('تشغيل تلقائي')
-    btn_stop_auto = types.KeyboardButton('إيقاف تلقائي')
-    
-    # الشريط الثاني: أوتوماتيكي والإحصائيات جنب بعض
-    btn_manual = types.KeyboardButton('أوتوماتيكي')
-    btn_stats = types.KeyboardButton('📊 الإحصائيات')
-    
-    # الشريط الثالث: وضع العكس
+def get_inline_markup(chat_id):
+    markup = types.InlineKeyboardMarkup(row_width=5)
     is_rev = reverse_mode_active.get(chat_id, False)
-    rev_btn_text = "🔄 العكس: مفعل 🟢" if is_rev else "🔄 العكس: متوقف 🔴"
-    btn_rev = types.KeyboardButton(rev_btn_text)
+    rev_text = "🔄 العكس: مفعل" if is_rev else "🔄 العكس: متوقف"
     
-    # الشريط الرابع: ربح وخسارة
-    btn_win = types.KeyboardButton('✅ ربح')
-    btn_loss = types.KeyboardButton('❌ خسارة')
+    # الأزرار في شريط أفقي واحد تماماً مثل الصورة المطلوبة
+    btn_auto = types.InlineKeyboardButton('تشغيل', callback_data='start_auto')
+    btn_stop = types.InlineKeyboardButton('إيقاف', callback_data='stop_auto')
+    btn_manual = types.InlineKeyboardButton('أوتوماتيكي', callback_data='manual_mode')
+    btn_rev = types.InlineKeyboardButton(rev_text, callback_data='toggle_rev')
+    btn_stats = types.InlineKeyboardButton('📊 الإحصائيات', callback_data='show_stats')
     
-    markup.add(btn_auto, btn_stop_auto)
-    markup.add(btn_manual, btn_stats)
-    markup.add(btn_rev)
-    markup.add(btn_win, btn_loss)
+    markup.row(btn_auto, btn_stop, btn_manual, btn_rev, btn_stats)
+    
+    # شريط إضافي لزر ربح وخسارة تحتها مباشرة
+    btn_win = types.InlineKeyboardButton('✅ ربح', callback_data='win_btn')
+    btn_loss = types.InlineKeyboardButton('❌ خسارة', callback_data='loss_btn')
+    markup.row(btn_win, btn_loss)
     return markup
 
 def create_vertical_kb(buttons_list, chat_id, row=2, add_back=True):
@@ -103,132 +97,111 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط الأزرار بالشكل المطلوب تماماً.", reply_markup=get_main_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! إليك لوحة التحكم الأفقية:", reply_markup=get_inline_markup(message.chat.id))
 
-@bot.message_handler(func=lambda message: '🔄 العكس:' in message.text)
-def toggle_reverse_mode(message):
-    chat_id = message.chat.id
-    current_state = reverse_mode_active.get(chat_id, False)
-    reverse_mode_active[chat_id] = not current_state
-    state_text = "مفعل 🟢 (تم عكس القرارات)" if reverse_mode_active[chat_id] else "متوقف 🔴 (الوضع الطبيعي)"
-    bot.send_message(chat_id, f"⚡ تم تغيير الوضع يدوياً.\nحالة زر الانعكاس: {state_text}", reply_markup=get_main_markup(chat_id))
-
-@bot.message_handler(func=lambda message: message.text == '📊 الإحصائيات')
-def show_stats_button(message):
-    chat_id = message.chat.id
-    if chat_id not in user_stats:
-        user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
+@bot.callback_query_handler(func=lambda call: True)
+def handle_inline_callbacks(call):
+    chat_id = call.message.chat.id
+    data = call.data
     
-    wins = user_stats[chat_id]['wins']
-    losses = user_stats[chat_id]['losses']
-    total = wins + losses
-    ratio = int((wins / total) * 100) if total > 0 else 0
+    if data == 'toggle_rev':
+        current_state = reverse_mode_active.get(chat_id, False)
+        reverse_mode_active[chat_id] = not current_state
+        state_text = "مفعل 🟢" if reverse_mode_active[chat_id] else "متوقف 🔴"
+        bot.answer_callback_query(call.id, f"تم تغيير وضع العكس: {state_text}")
+        try:
+            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=get_inline_markup(chat_id))
+        except:
+            pass
 
-    stats_text = (f"📊 **لوحة الإحصائيات الحالية:**\n"
-                  f"━━━━━━━━━━━━━━━━━━━\n"
-                  f"🟢 صفقات رابحة: {wins}\n"
-                  f"🔴 صفقات خاسرة: {losses}\n"
-                  f"🎯 نسبة النجاح الإجمالية: {ratio}%")
-    bot.send_message(chat_id, stats_text, reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    elif data == 'show_stats':
+        if chat_id not in user_stats:
+            user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
+        wins = user_stats[chat_id]['wins']
+        losses = user_stats[chat_id]['losses']
+        total = wins + losses
+        ratio = int((wins / total) * 100) if total > 0 else 0
+        stats_text = (f"📊 **لوحة الإحصائيات الحالية:**\n"
+                      f"━━━━━━━━━━━━━━━━━━━\n"
+                      f"🟢 صفقات رابحة: {wins}\n"
+                      f"🔴 صفقات خاسرة: {losses}\n"
+                      f"🎯 نسبة النجاح الإجمالية: {ratio}%")
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, stats_text, reply_markup=get_inline_markup(chat_id), parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text in ['✅ ربح', '❌ خسارة'])
-def handle_stats(message):
-    chat_id = message.chat.id
-    if chat_id not in user_stats:
-        user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
+    elif data == 'win_btn' or data == 'loss_btn':
+        if chat_id not in user_stats:
+            user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
+        if data == 'win_btn':
+            user_stats[chat_id]['wins'] += 1
+            user_stats[chat_id]['consecutive_losses'] = 0
+            res_msg = "📈 ممتاز! تم تسجيل صفقة ربحة."
+        else:
+            user_stats[chat_id]['losses'] += 1
+            user_stats[chat_id]['consecutive_losses'] += 1
+            res_msg = "📉 تم تسجيل صفقة خاسرة."
+            if user_stats[chat_id]['consecutive_losses'] >= 2:
+                reverse_mode_active[chat_id] = True
+                res_msg += "\n⚠️ رصدنا خسارتين، تم تفعيل (🔄 وضع العكس أوتوماتيكياً)!"
         
-    if message.text == '✅ ربح':
-        user_stats[chat_id]['wins'] += 1
-        user_stats[chat_id]['consecutive_losses'] = 0
-        result_msg = "📈 ممتاز! تم تسجيل صفقة ربحة في سجلك."
-    else:
-        user_stats[chat_id]['losses'] += 1
-        user_stats[chat_id]['consecutive_losses'] += 1
-        result_msg = "📉 تم تسجيل صفقة خاسرة في سجلك."
-        
-        if user_stats[chat_id]['consecutive_losses'] >= 2:
-            reverse_mode_active[chat_id] = True
-            result_msg += "\n⚠️ **تنبيه أوتوماتيكي:** رصدنا خسارتين متتاليتين، تم تفعيل (🔄 وضع العكس أوتوماتيكياً)!"
+        wins = user_stats[chat_id]['wins']
+        losses = user_stats[chat_id]['losses']
+        total = wins + losses
+        ratio = int((wins / total) * 100) if total > 0 else 0
+        bot.answer_callback_query(call.id, "تم تسجيل النتيجة بنجاح")
+        bot.send_message(chat_id, f"{res_msg}\n📊 رابحة: {wins} | خاسرة: {losses} | النسبة: {ratio}%", reply_markup=get_inline_markup(chat_id))
 
-    wins = user_stats[chat_id]['wins']
-    losses = user_stats[chat_id]['losses']
-    total = wins + losses
-    ratio = int((wins / total) * 100) if total > 0 else 0
+    elif data == 'start_auto':
+        bot.answer_callback_query(call.id)
+        user_data[chat_id] = {'auto_step': 'select_pair'}
+        markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True)
+        bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
 
-    stats_text = (f"{result_msg}\n"
-                  f"━━━━━━━━━━━━━━━━━━━\n"
-                  f"📊 صفقات رابحة: {wins} | صفقات خاسرة: {losses}\n"
-                  f"🎯 نسبة النجاح: {ratio}%")
-    bot.send_message(chat_id, stats_text, reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    elif data == 'stop_auto':
+        auto_trading_active[chat_id] = False
+        bot.answer_callback_query(call.id, "تم إيقاف التشغيل التلقائي")
+        bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_inline_markup(chat_id))
 
-@bot.message_handler(func=lambda message: message.text == 'تشغيل تلقائي')
-def start_auto_menu(message):
-    chat_id = message.chat.id
-    user_data[chat_id] = {'auto_step': 'select_pair'}
-    markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True)
-    bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
-
-@bot.message_handler(func=lambda message: message.text == 'أوتوماتيكي')
-def step_manual_start(message):
-    chat_id = message.chat.id
-    user_data[chat_id] = {'step': 1}
-    bot.send_message(chat_id, "1. اختر الزوج للإدخال اليدوي:", reply_markup=create_vertical_kb(PAIRS, chat_id, row=2, add_back=True))
+    elif data == 'manual_mode':
+        bot.answer_callback_query(call.id)
+        user_data[chat_id] = {'step': 1}
+        bot.send_message(chat_id, "1. اختر الزوج للإدخال اليدوي:", reply_markup=create_vertical_kb(PAIRS, chat_id, row=2, add_back=True))
 
 @bot.message_handler(func=lambda message: chat_id_in_step(message.chat.id, 1) and (message.text in PAIRS or message.text == 'جميع الأزواج (عشوائي)'))
 def step_manual_pair(message):
     chat_id = message.chat.id
-    text = message.text
     if chat_id in user_data and user_data[chat_id].get('step') == 1:
-        user_data[chat_id]['pair'] = text
+        user_data[chat_id]['pair'] = message.text
         user_data[chat_id]['step'] = 2
         bot.send_message(chat_id, "2. اختر نوع الترند:", reply_markup=create_vertical_kb(['ترند صاعد', 'ترند هابط', 'ترند متردد'], chat_id, add_back=True))
-        return
 
 @bot.message_handler(func=lambda message: chat_id_in_auto_step(message.chat.id, 'select_pair') and (message.text in PAIRS or message.text == 'جميع الأزواج (عشوائي)'))
 def handle_auto_pair_chosen(message):
     chat_id = message.chat.id
-    now_ts = time.time()
-    if now_ts - last_click_time.get(chat_id, 0) < 1.0:
-        return
-    last_click_time[chat_id] = now_ts
-    
     user_data[chat_id]['auto_pair'] = message.text
     user_data[chat_id]['auto_step'] = 'select_time'
-    
     times = ['تلقائي ⚡ (دقيقة واحدة)'] + [f"{i} دقيقة" for i in range(1, 11)]
     bot.send_message(chat_id, f"🟢 الزوج المختار: **{message.text}**\n2. اختر وقت الصفقات التلقائية:", reply_markup=create_vertical_kb(times, chat_id, row=3, add_back=True), parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: chat_id_in_auto_step(message.chat.id, 'select_time') and ("دقيقة" in message.text or 'تلقائي' in message.text))
 def handle_auto_time_chosen(message):
     chat_id = message.chat.id
-    now_ts = time.time()
-    if now_ts - last_click_time.get(chat_id, 0) < 1.0:
-        return
-    last_click_time[chat_id] = now_ts
-
     selected_pair = user_data[chat_id].get('auto_pair', 'جميع الأزواج (عشوائي)')
     selected_time_text = message.text
     
     auto_trading_active[chat_id] = False
     time.sleep(0.3)
-    
     auto_trading_active[chat_id] = True
     auto_selected_pairs[chat_id] = selected_pair
     auto_selected_durations[chat_id] = selected_time_text
     
-    bot.send_message(chat_id, f"🚀 تم بدء التشغيل التلقائي بنجاح وبصفقة واحدة دقيقة قبل 20 ثانية من كل شمعة!\n🔹 الزوج: **{selected_pair}**\n🔹 وقت الصفقة: **{selected_time_text}**", reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, f"🚀 تم بدء التشغيل التلقائي بنجاح!\n🔹 الزوج: **{selected_pair}**\n🔹 وقت الصفقة: **{selected_time_text}**", reply_markup=get_inline_markup(chat_id), parse_mode="Markdown")
     user_data[chat_id] = {}
 
     def background_sender(target_chat_id):
         while auto_trading_active.get(target_chat_id, False):
             time_setting = auto_selected_durations.get(target_chat_id, 'تلقائي ⚡ (دقيقة واحدة)')
-            if 'تلقائي' in time_setting:
-                rand_duration = 1
-            else:
-                try:
-                    rand_duration = int(time_setting.split()[0])
-                except:
-                    rand_duration = 1
+            rand_duration = 1 if 'تلقائي' in time_setting else int(time_setting.split()[0])
 
             now = datetime.now()
             target_time = now.replace(second=40, microsecond=0)
@@ -236,10 +209,9 @@ def handle_auto_time_chosen(message):
                 target_time = target_time + timedelta(minutes=1)
                 
             sleep_seconds = (target_time - datetime.now()).total_seconds()
-            if sleep_seconds > 0:
-                while sleep_seconds > 0 and auto_trading_active.get(target_chat_id, False):
-                    time.sleep(min(sleep_seconds, 0.4))
-                    sleep_seconds = (target_time - datetime.now()).total_seconds()
+            while sleep_seconds > 0 and auto_trading_active.get(target_chat_id, False):
+                time.sleep(min(sleep_seconds, 0.4))
+                sleep_seconds = (target_time - datetime.now()).total_seconds()
             
             if not auto_trading_active.get(target_chat_id, False):
                 break
@@ -251,41 +223,26 @@ def handle_auto_time_chosen(message):
             last_sent_minute[target_chat_id] = current_minute_str
 
             current_choice = auto_selected_pairs.get(target_chat_id, 'جميع الأزواج (عشوائي)')
-            if current_choice == 'جميع الأزواج (عشوائي)':
-                available_pairs = [p for p in PAIRS if active_pair_locks.get(p, 0) < time.time()]
-                if not available_pairs:
-                    rand_pair = random.choice(PAIRS)
-                else:
-                    rand_pair = random.choice(available_pairs)
-            else:
-                rand_pair = current_choice
-
-            active_pair_locks[rand_pair] = time.time() + (rand_duration * 60 + 10)
+            rand_pair = random.choice(PAIRS) if current_choice == 'جميع الأزواج (عشوائي)' else current_choice
                 
-            rand_trend_type = random.choice(['ترند صاعد', 'ترند هابط'])
-            action, strength, actual_trend = analyze_otc_trap(rand_pair, rand_trend_type, target_chat_id)
-            
+            action, strength, actual_trend = analyze_otc_trap(rand_pair, 'ترند صاعد', target_chat_id)
             now_msg = datetime.now()
             entry_time = (now_msg + timedelta(minutes=1)).replace(second=0, microsecond=0)
             expiry_time = entry_time + timedelta(minutes=rand_duration)
             
-            is_rev = reverse_mode_active.get(target_chat_id, False)
-            mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي"
-            
-            auto_text = (f"🧠 **التحليل الذكي للـ OTC (وضع الاستراتيجية: {mode_status})**\n"
+            auto_text = (f"🧠 **التحليل الذكي للـ OTC**\n"
                          f"━━━━━━━━━━━━━━━━━━━\n"
-                         f"🔹 **الزوج / السهم:** {rand_pair} | {actual_trend}\n"
-                         f"🔹 **مدة الصفقة:** {rand_duration} دقيقة\n"
-                         f"🔹 **القرار المحسوب:** {action}\n"
-                         f"🔹 **مؤشر الثقة الذكي:** {strength}%\n"
+                         f"🔹 **الزوج:** {rand_pair} | {actual_trend}\n"
+                         f"🔹 **المدة:** {rand_duration} دقيقة\n"
+                         f"🔹 **القرار:** {action}\n"
+                         f"🔹 **مؤشر الثقة:** {strength}%\n"
                          f"━━━━━━━━━━━━━━━━━━━\n"
-                         f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
-                         f"🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime('%H:%M:%S')}")
+                         f"⏳ **الدخول:** {entry_time.strftime('%H:%M:%S')}\n"
+                         f"🏁 **الانتهاء:** {expiry_time.strftime('%H:%M:%S')}")
             try:
-                bot.send_message(target_chat_id, auto_text, reply_markup=get_main_markup(target_chat_id), parse_mode="Markdown")
+                bot.send_message(target_chat_id, auto_text, reply_markup=get_inline_markup(target_chat_id), parse_mode="Markdown")
             except:
                 break
-            
             time.sleep(2.5)
 
     threading.Thread(target=background_sender, args=(chat_id,), daemon=True).start()
@@ -307,11 +264,7 @@ def step_manual_trend(message):
 @bot.message_handler(func=lambda message: chat_id_in_step(message.chat.id, 3) and ("دقيقة" in message.text or 'تلقائي' in message.text))
 def step_manual_time(message):
     chat_id = message.chat.id
-    if 'تلقائي' in message.text:
-        user_data[chat_id]['time'] = "1 دقيقة (تلقائي)"
-    else:
-        user_data[chat_id]['time'] = message.text
-        
+    user_data[chat_id]['time'] = "1 دقيقة (تلقائي)" if 'تلقائي' in message.text else message.text
     user_data[chat_id]['step'] = 4
     trends = [f"Trend {i}" for i in range(50, 1050, 100)]
     bot.send_message(chat_id, "4. اختر قوة الترند:", reply_markup=create_vertical_kb(trends, chat_id, row=3, add_back=True))
@@ -336,23 +289,19 @@ def step_manual_rsi(message):
     chat_id = message.chat.id
     user_data[chat_id]['rsi'] = message.text.split()[1]
     user_data[chat_id]['step'] = 7
-    bot.send_message(chat_id, "7. حدد الشمعة الحالية (الأخيرة):", reply_markup=create_vertical_kb(CANDLE_OPTIONS, chat_id, row=2, add_back=True))
+    bot.send_message(chat_id, "7. حدد الشمعة الحالية:", reply_markup=create_vertical_kb(CANDLE_OPTIONS, chat_id, row=2, add_back=True))
 
 @bot.message_handler(func=lambda message: chat_id_in_step(message.chat.id, 7) and message.text in CANDLE_OPTIONS)
 def step_manual_current_candle(message):
     chat_id = message.chat.id
     user_data[chat_id]['current_candle'] = message.text
     user_data[chat_id]['step'] = 8
-    bot.send_message(chat_id, "8. حدد الشموع السابقة (التي قبلها):", reply_markup=create_vertical_kb(CANDLE_OPTIONS, chat_id, row=2, add_back=True))
+    bot.send_message(chat_id, "8. حدد الشموع السابقة:", reply_markup=create_vertical_kb(CANDLE_OPTIONS, chat_id, row=2, add_back=True))
 
 @bot.message_handler(func=lambda message: chat_id_in_step(message.chat.id, 8) and message.text in CANDLE_OPTIONS)
 def step_manual_final(message):
     chat_id = message.chat.id
     data = user_data[chat_id]
-    prev_candles = message.text
-    current_candle = data['current_candle']
-    
-    rsi = data['rsi']
     duration = int(data['time'].split()[0])
     now = datetime.now()
     entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
@@ -360,69 +309,23 @@ def step_manual_final(message):
     
     action, strength, actual_trend = analyze_otc_trap(data['pair'], data['trend_type'], chat_id)
     
-    is_rev = reverse_mode_active.get(chat_id, False)
-    mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي"
-    
-    result_text = (f"🧠 **التحليل اليدوي للـ OTC (الوضع: {mode_status})**\n"
+    result_text = (f"🧠 **التحليل اليدوي للـ OTC**\n"
                    f"━━━━━━━━━━━━━━━━━━━\n"
                    f"🔹 **الزوج:** {data['pair']} | {actual_trend}\n"
                    f"🔹 **الوقت المحدد:** {data['time']}\n"
-                   f"🔹 **الشمعة الحالية:** {current_candle}\n"
-                   f"🔹 **الشموع السابقة:** {prev_candles}\n"
                    f"🔹 **القرار المحسوب:** {action}\n"
                    f"🔹 **مؤشر الثقة الحي:** {strength}%\n"
                    f"━━━━━━━━━━━━━━━━━━━\n"
-                   f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
-                   f"🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime('%H:%M:%S')}")
+                   f"⏳ **وقت الدخول:** {entry_time.strftime('%H:%M:%S')}\n"
+                   f"🏁 **وقت الانتهاء:** {expiry_time.strftime('%H:%M:%S')}")
                  
-    bot.send_message(chat_id, result_text, reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, result_text, reply_markup=get_inline_markup(chat_id), parse_mode="Markdown")
     user_data[chat_id] = {}
-
-@bot.message_handler(func=lambda message: message.text == 'إيقاف تلقائي')
-def stop_auto(message):
-    chat_id = message.chat.id
-    auto_trading_active[chat_id] = False
-    bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_main_markup(chat_id))
 
 @bot.message_handler(func=lambda message: message.text == '⬅️ رجوع')
 def handle_back(message):
     chat_id = message.chat.id
-    data = user_data.get(chat_id, {})
-    step = data.get('step', 0)
-    auto_step = data.get('auto_step', '')
-    
-    if auto_step == 'select_time':
-        user_data[chat_id] = {'auto_step': 'select_pair'}
-        markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True)
-        bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
-        return
-        
-    if step <= 1:
-        user_data[chat_id] = {}
-        bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_main_markup(chat_id))
-    elif step == 2:
-        data['step'] = 1
-        bot.send_message(chat_id, "1. اختر الزوج:", reply_markup=create_vertical_kb(PAIRS, chat_id, row=2, add_back=True))
-    elif step == 3:
-        data['step'] = 2
-        bot.send_message(chat_id, "2. اختر نوع الترند:", reply_markup=create_vertical_kb(['ترند صاعد', 'ترند هابط', 'ترند متردد'], chat_id, add_back=True))
-    elif step == 4:
-        data['step'] = 3
-        times = ['تلقائي ⚡ (دقيقة واحدة)'] + [f"{i} دقيقة" for i in range(1, 11)]
-        bot.send_message(chat_id, "3. اختر الوقت:", reply_markup=create_vertical_kb(times, chat_id, row=3, add_back=True))
-    elif step == 5:
-        data['step'] = 4
-        trends = [f"Trend {i}" for i in range(50, 1050, 100)]
-        bot.send_message(chat_id, "4. اختر قوة الترند:", reply_markup=create_vertical_kb(trends, chat_id, row=3, add_back=True))
-    elif step == 6:
-        data['step'] = 5
-        bot.send_message(chat_id, "5. من المسيطر؟", reply_markup=create_vertical_kb(['المشترون أكثر', 'البائعون أكثر'], chat_id, add_back=True))
-    elif step == 7:
-        data['step'] = 6
-        rsi_list = [f"RSI {i}" for i in range(30, 90, 10)]
-        bot.send_message(chat_id, "6. حدد RSI:", reply_markup=create_vertical_kb(rsi_list, chat_id, row=3, add_back=True))
-    else:
-        user_data[chat_id] = {}
-        bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_main_markup(chat_id))
+    user_data[chat_id] = {}
+    bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_inline_markup(chat_id))
 
 bot.infinity_polling()
