@@ -41,28 +41,27 @@ CANDLE_OPTIONS = [
     'شمعة حمراء 1', 'شمعة حمراء 2', 'شمعة حمراء 3'
 ]
 
-# دالة القائمة الثابتة أسفل الجوال (أزرار Reply Keyboard مرتبة أفقياً)
 def get_bottom_fixed_keyboard(chat_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     
     is_rev = reverse_mode_active.get(chat_id, False)
-    rev_text = "🔄 العكس: مفعل 🟢" if is_rev else "🔄 العكس: متوقف 🔴"
+    rev_text = "العكس: مفعل 🟢" if is_rev else "العكس: متوقف 🔴"
+
+    # الصف الأول: أوتوماتيكي + تشغيل تلقائي
+    btn_manual = types.KeyboardButton("أوتوماتيكي")
+    btn_start_auto = types.KeyboardButton("تشغيل تلقائي")
     
-    is_auto = auto_trading_active.get(chat_id, False)
-    auto_text = "⏹ إيقاف التلقائي" if is_auto else "▶️ تشغيل التلقائي"
+    # الصف الثاني: إيقاف تلقائي + العكس
+    btn_stop_auto = types.KeyboardButton("إيقاف تلقائي")
+    btn_rev = types.KeyboardButton(rev_text)
+    
+    # الصف الثالث: ربح + خسارة
+    btn_win = types.KeyboardButton("ربح ✅")
+    btn_loss = types.KeyboardButton("خسارة ❌")
 
-    # تصميم الأزرار الثابتة بأسفل الشاشة لتشبه الأشرطة المدمجة
-    btn1 = types.KeyboardButton(auto_text)
-    btn2 = types.KeyboardButton(rev_text)
-    btn3 = types.KeyboardButton("📊 أوتوماتيكي يدوي")
-    btn4 = types.KeyboardButton("📈 الإحصائيات")
-    btn5 = types.KeyboardButton("✅ ربح")
-    btn6 = types.KeyboardButton("❌ خسارة")
-
-    # ترتيب الأزرار بجانب بعضها في صفوف متناسقة أسفل الشاشة
-    markup.row(btn1, btn2)
-    markup.row(btn3, btn4)
-    markup.row(btn5, btn6)
+    markup.row(btn_manual, btn_start_auto)
+    markup.row(btn_stop_auto, btn_rev)
+    markup.row(btn_win, btn_loss)
     
     return markup
 
@@ -100,54 +99,36 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(
-        message.chat.id, 
-        "أهلاً بك! تم تفعيل القائمة الثابتة في أسفل الشاشة:", 
-        reply_markup=get_bottom_fixed_keyboard(message.chat.id)
-    )
+    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط القائمة الثابتة بالأسفل:", reply_markup=get_bottom_fixed_keyboard(message.chat.id))
 
 @bot.message_handler(func=lambda message: True)
 def handle_text_messages(message):
     chat_id = message.chat.id
     text = message.text
 
-    if text == "🔄 العكس: مفعل 🟢" or text == "🔄 العكس: متوقف 🔴":
+    if text == "العكس: مفعل 🟢" or text == "العكس: متوقف 🔴":
         current_state = reverse_mode_active.get(chat_id, False)
         reverse_mode_active[chat_id] = not current_state
         state_text = "مفعل 🟢" if reverse_mode_active[chat_id] else "متوقف 🔴"
         bot.send_message(chat_id, f"تم تغيير وضع العكس إلى: {state_text}", reply_markup=get_bottom_fixed_keyboard(chat_id))
 
-    elif text == "▶️ تشغيل التلقائي":
+    elif text == "تشغيل تلقائي":
         user_data[chat_id] = {'auto_step': 'select_pair'}
         markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, row=2, add_back=True)
         bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
 
-    elif text == "⏹ إيقاف التلقائي":
+    elif text == "إيقاف تلقائي":
         auto_trading_active[chat_id] = False
         bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_bottom_fixed_keyboard(chat_id))
 
-    elif text == "📊 أوتوماتيكي يدوي":
+    elif text == "أوتوماتيكي":
         user_data[chat_id] = {'step': 1}
         bot.send_message(chat_id, "1. اختر الزوج للإدخال اليدوي:", reply_markup=create_vertical_kb(PAIRS, row=2, add_back=True))
 
-    elif text == "📈 الإحصائيات":
+    elif text == "ربح ✅" or text == "خسارة ❌":
         if chat_id not in user_stats:
             user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
-        wins = user_stats[chat_id]['wins']
-        losses = user_stats[chat_id]['losses']
-        total = wins + losses
-        ratio = int((wins / total) * 100) if total > 0 else 0
-        stats_text = (f"📊 **لوحة الإحصائيات:**\n"
-                      f"━━━━━━━━━━━━━━━━━━━\n"
-                      f"🟢 رابحة: {wins}\n"
-                      f"🔴 خاسرة: {losses}\n"
-                      f"🎯 نسبة النجاح: {ratio}%")
-        bot.send_message(chat_id, stats_text, reply_markup=get_bottom_fixed_keyboard(chat_id))
-
-    elif text == "✅ ربح" or text == "❌ خسارة":
-        if chat_id not in user_stats:
-            user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
-        if text == "✅ ربح":
+        if text == "ربح ✅":
             user_stats[chat_id]['wins'] += 1
             user_stats[chat_id]['consecutive_losses'] = 0
             res_msg = "📈 ممتاز! تم تسجيل صفقة ربحة."
@@ -167,9 +148,8 @@ def handle_text_messages(message):
 
     elif text == '⬅️ رجوع':
         user_data[chat_id] = {}
-        bot.send_message(chat_id, "تم العودة للقائمة الرئيسية:", reply_markup=get_bottom_fixed_keyboard(chat_id))
+        bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_bottom_fixed_keyboard(chat_id))
 
-    # خطوات الإدخال اليدوي أو التلقائي
     elif chat_id in user_data and user_data[chat_id].get('step') == 1 and (text in PAIRS or text == 'جميع الأزواج (عشوائي)'):
         user_data[chat_id]['pair'] = text
         user_data[chat_id]['step'] = 2
