@@ -43,24 +43,25 @@ CANDLE_OPTIONS = [
     'شمعة حمراء 1', 'شمعة حمراء 2', 'شمعة حمراء 3'
 ]
 
-def get_inline_markup(chat_id):
-    markup = types.InlineKeyboardMarkup(row_width=5)
-    is_rev = reverse_mode_active.get(chat_id, False)
+def get_main_inline_menu(chat_id):
+    markup = types.InlineKeyboardMarkup(row_width=4)
+    is_rev = reverse_mode_active.get(chat_id, false) if 'false' in locals() else reverse_mode_active.get(chat_id, False)
     rev_text = "🔄 العكس: مفعل" if is_rev else "🔄 العكس: متوقف"
     
-    # الأزرار في شريط أفقي واحد تماماً مثل الصورة المطلوبة
-    btn_auto = types.InlineKeyboardButton('تشغيل', callback_data='start_auto')
-    btn_stop = types.InlineKeyboardButton('إيقاف', callback_data='stop_auto')
+    # 4 أزرار أساسية في شريط أفقي واحد ثابت
+    btn_auto = types.InlineKeyboardButton('تشغيل تلقائي', callback_data='start_auto')
+    btn_stop = types.InlineKeyboardButton('إيقاف تلقائي', callback_data='stop_auto')
     btn_manual = types.InlineKeyboardButton('أوتوماتيكي', callback_data='manual_mode')
-    btn_rev = types.InlineKeyboardButton(rev_text, callback_data='toggle_rev')
     btn_stats = types.InlineKeyboardButton('📊 الإحصائيات', callback_data='show_stats')
     
-    markup.row(btn_auto, btn_stop, btn_manual, btn_rev, btn_stats)
+    markup.row(btn_auto, btn_stop, btn_manual, btn_stats)
     
-    # شريط إضافي لزر ربح وخسارة تحتها مباشرة
+    # شريط إضافي لتحكم العكس والربح والخسارة
+    btn_rev = types.InlineKeyboardButton(rev_text, callback_data='toggle_rev')
     btn_win = types.InlineKeyboardButton('✅ ربح', callback_data='win_btn')
     btn_loss = types.InlineKeyboardButton('❌ خسارة', callback_data='loss_btn')
-    markup.row(btn_win, btn_loss)
+    
+    markup.row(btn_rev, btn_win, btn_loss)
     return markup
 
 def create_vertical_kb(buttons_list, chat_id, row=2, add_back=True):
@@ -97,7 +98,7 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! إليك لوحة التحكم الأفقية:", reply_markup=get_inline_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! هذه هي القائمة الرئيسية الثابتة:", reply_markup=get_main_inline_menu(message.chat.id))
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_inline_callbacks(call):
@@ -110,7 +111,7 @@ def handle_inline_callbacks(call):
         state_text = "مفعل 🟢" if reverse_mode_active[chat_id] else "متوقف 🔴"
         bot.answer_callback_query(call.id, f"تم تغيير وضع العكس: {state_text}")
         try:
-            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=get_inline_markup(chat_id))
+            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=get_main_inline_menu(chat_id))
         except:
             pass
 
@@ -121,13 +122,13 @@ def handle_inline_callbacks(call):
         losses = user_stats[chat_id]['losses']
         total = wins + losses
         ratio = int((wins / total) * 100) if total > 0 else 0
-        stats_text = (f"📊 **لوحة الإحصائيات الحالية:**\n"
+        stats_text = (f"📊 **لوحة الإحصائيات الثابتة:**\n"
                       f"━━━━━━━━━━━━━━━━━━━\n"
                       f"🟢 صفقات رابحة: {wins}\n"
                       f"🔴 صفقات خاسرة: {losses}\n"
-                      f"🎯 نسبة النجاح الإجمالية: {ratio}%")
+                      f"🎯 نسبة النجاح: {ratio}%")
         bot.answer_callback_query(call.id)
-        bot.send_message(chat_id, stats_text, reply_markup=get_inline_markup(chat_id), parse_mode="Markdown")
+        bot.send_message(chat_id, stats_text, reply_markup=get_main_inline_menu(chat_id), parse_mode="Markdown")
 
     elif data == 'win_btn' or data == 'loss_btn':
         if chat_id not in user_stats:
@@ -148,8 +149,8 @@ def handle_inline_callbacks(call):
         losses = user_stats[chat_id]['losses']
         total = wins + losses
         ratio = int((wins / total) * 100) if total > 0 else 0
-        bot.answer_callback_query(call.id, "تم تسجيل النتيجة بنجاح")
-        bot.send_message(chat_id, f"{res_msg}\n📊 رابحة: {wins} | خاسرة: {losses} | النسبة: {ratio}%", reply_markup=get_inline_markup(chat_id))
+        bot.answer_callback_query(call.id, "تم تسجيل النتيجة")
+        bot.send_message(chat_id, f"{res_msg}\n📊 رابحة: {wins} | خاسرة: {losses} | النسبة: {ratio}%", reply_markup=get_main_inline_menu(chat_id))
 
     elif data == 'start_auto':
         bot.answer_callback_query(call.id)
@@ -160,7 +161,7 @@ def handle_inline_callbacks(call):
     elif data == 'stop_auto':
         auto_trading_active[chat_id] = False
         bot.answer_callback_query(call.id, "تم إيقاف التشغيل التلقائي")
-        bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_inline_markup(chat_id))
+        bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_main_inline_menu(chat_id))
 
     elif data == 'manual_mode':
         bot.answer_callback_query(call.id)
@@ -195,7 +196,7 @@ def handle_auto_time_chosen(message):
     auto_selected_pairs[chat_id] = selected_pair
     auto_selected_durations[chat_id] = selected_time_text
     
-    bot.send_message(chat_id, f"🚀 تم بدء التشغيل التلقائي بنجاح!\n🔹 الزوج: **{selected_pair}**\n🔹 وقت الصفقة: **{selected_time_text}**", reply_markup=get_inline_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, f"🚀 تم بدء التشغيل التلقائي بنجاح!\n🔹 الزوج: **{selected_pair}**\n🔹 وقت الصفقة: **{selected_time_text}**", reply_markup=get_main_inline_menu(chat_id), parse_mode="Markdown")
     user_data[chat_id] = {}
 
     def background_sender(target_chat_id):
@@ -240,7 +241,7 @@ def handle_auto_time_chosen(message):
                          f"⏳ **الدخول:** {entry_time.strftime('%H:%M:%S')}\n"
                          f"🏁 **الانتهاء:** {expiry_time.strftime('%H:%M:%S')}")
             try:
-                bot.send_message(target_chat_id, auto_text, reply_markup=get_inline_markup(target_chat_id), parse_mode="Markdown")
+                bot.send_message(target_chat_id, auto_text, reply_markup=get_main_inline_menu(target_chat_id), parse_mode="Markdown")
             except:
                 break
             time.sleep(2.5)
@@ -299,7 +300,7 @@ def step_manual_current_candle(message):
     bot.send_message(chat_id, "8. حدد الشموع السابقة:", reply_markup=create_vertical_kb(CANDLE_OPTIONS, chat_id, row=2, add_back=True))
 
 @bot.message_handler(func=lambda message: chat_id_in_step(message.chat.id, 8) and message.text in CANDLE_OPTIONS)
-def step_manual_final(message):
+def style_manual_final_msg(message):
     chat_id = message.chat.id
     data = user_data[chat_id]
     duration = int(data['time'].split()[0])
@@ -319,13 +320,13 @@ def step_manual_final(message):
                    f"⏳ **وقت الدخول:** {entry_time.strftime('%H:%M:%S')}\n"
                    f"🏁 **وقت الانتهاء:** {expiry_time.strftime('%H:%M:%S')}")
                  
-    bot.send_message(chat_id, result_text, reply_markup=get_inline_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, result_text, reply_markup=get_main_inline_menu(chat_id), parse_mode="Markdown")
     user_data[chat_id] = {}
 
 @bot.message_handler(func=lambda message: message.text == '⬅️ رجوع')
 def handle_back(message):
     chat_id = message.chat.id
     user_data[chat_id] = {}
-    bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_inline_markup(chat_id))
+    bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_main_inline_menu(chat_id))
 
 bot.infinity_polling()
