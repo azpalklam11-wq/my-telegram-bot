@@ -47,20 +47,18 @@ def get_bottom_fixed_keyboard(chat_id):
     is_rev = reverse_mode_active.get(chat_id, False)
     rev_text = "العكس: مفعل 🟢" if is_rev else "العكس: متوقف 🔴"
 
-    # الصف الأول: أوتوماتيكي + تشغيل تلقائي
-    btn_manual = types.KeyboardButton("أوتوماتيكي")
-    btn_start_auto = types.KeyboardButton("تشغيل تلقائي")
-    
-    # الصف الثاني: إيقاف تلقائي + العكس
-    btn_stop_auto = types.KeyboardButton("إيقاف تلقائي")
+    # الترتيب في أعمدة عمودية كما طلبت
+    btn_start_auto = types.KeyboardButton("تشغيل تلقائي 🚀")
+    btn_stop_auto = types.KeyboardButton("إيقاف تلقائي ⏹️")
     btn_rev = types.KeyboardButton(rev_text)
-    
-    # الصف الثالث: ربح + خسارة
+    btn_manual = types.KeyboardButton("أوتوماتيكي 📊")
     btn_win = types.KeyboardButton("ربح ✅")
     btn_loss = types.KeyboardButton("خسارة ❌")
 
-    markup.row(btn_manual, btn_start_auto)
-    markup.row(btn_stop_auto, btn_rev)
+    markup.row(btn_start_auto)
+    markup.row(btn_stop_auto)
+    markup.row(btn_rev)
+    markup.row(btn_manual)
     markup.row(btn_win, btn_loss)
     
     return markup
@@ -99,7 +97,7 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط القائمة الثابتة بالأسفل:", reply_markup=get_bottom_fixed_keyboard(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! تم ترتيب أزرار التشغيل التلقائي والإيقاف والعكس بشكل عمودي في القائمة الثابتة:", reply_markup=get_bottom_fixed_keyboard(message.chat.id))
 
 @bot.message_handler(func=lambda message: True)
 def handle_text_messages(message):
@@ -112,16 +110,16 @@ def handle_text_messages(message):
         state_text = "مفعل 🟢" if reverse_mode_active[chat_id] else "متوقف 🔴"
         bot.send_message(chat_id, f"تم تغيير وضع العكس إلى: {state_text}", reply_markup=get_bottom_fixed_keyboard(chat_id))
 
-    elif text == "تشغيل تلقائي":
+    elif text == "تشغيل تلقائي 🚀":
         user_data[chat_id] = {'auto_step': 'select_pair'}
         markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, row=2, add_back=True)
         bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
 
-    elif text == "إيقاف تلقائي":
+    elif text == "إيقاف تلقائي ⏹️":
         auto_trading_active[chat_id] = False
         bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_bottom_fixed_keyboard(chat_id))
 
-    elif text == "أوتوماتيكي":
+    elif text == "أوتوماتيكي 📊":
         user_data[chat_id] = {'step': 1}
         bot.send_message(chat_id, "1. اختر الزوج للإدخال اليدوي:", reply_markup=create_vertical_kb(PAIRS, row=2, add_back=True))
 
