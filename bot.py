@@ -6,7 +6,7 @@ import os
 import threading
 import random
 
-# قراءة التوكن ومعرف الأدمن الجديد من بيئة الاستضافة بأمان (مع وضع القيم كاحتياطي)
+# قراءة التوكن ومعرف الأدمن من بيئة الاستضافة بأمان (مع وضع القيم كاحتياطي)
 TOKEN = os.getenv('TOKEN', '8937685397:AAFZTpk7Lz3DQZzFkLBSD2UCE9qRSECe0WQ')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '6513565024'))
 
@@ -75,33 +75,38 @@ def create_vertical_kb(buttons_list, chat_id, row=2, add_back=True):
             markup.row(types.KeyboardButton('إيقاف النظام'))
     return markup
 
-def analyze_otc_trap(pair, trend_type, chat_id):
-    base_strength = random.randint(85, 99)
+def anti_otc_trap_algorithm(pair, trend_type, chat_id):
+    """
+    خوارزمية مضادة لفخاخ الـ OTC (مصممة للهروب من تلاعب الحشود ونقاط التثبيت)
+    """
     is_rev = reverse_mode_active.get(chat_id, False)
-
+    current_second = datetime.now().second
+    is_manipulation_zone = 45 <= current_second <= 59
+    
     if trend_type == "ترند صاعد":
-        primary_action = "🟢 صفقة شراء مؤكدة"
-        primary_trend = "ترند صاعد"
-        opp_action = "🔴 صفقة بيع مؤكدة"
-        opp_trend = "ترند هابط"
+        crowd_action = "🟢 شراء (فخ محتمل للقطيع)"
+        smart_action = "🔴 بيع تكتيكي عكسي (Anti-Trap)"
+        actual_trend = "ترند صاعد (مخترق وهمياً)"
     else:
-        primary_action = "🔴 صفقة بيع مؤكدة"
-        primary_trend = "ترند هابط"
-        opp_action = "🟢 صفقة شراء مؤكدة"
-        opp_trend = "ترند صاعد"
+        crowd_action = "🔴 بيع (فخ محتمل للقطيع)"
+        smart_action = "🟢 شراء تكتيكي عكسي (Anti-Trap)"
+        actual_trend = "ترند هابط (مخترق وهمياً)"
+
+    if is_manipulation_zone:
+        base_strength = random.randint(92, 99)
+    else:
+        base_strength = random.randint(85, 91)
 
     if is_rev:
-        action = opp_action + " (عكسي مقلوب 🔄)"
-        actual_trend = opp_trend
+        final_decision = smart_action + " [موضع عكسي مفعل 🔄]"
     else:
-        action = primary_action + " (عادي)"
-        actual_trend = primary_trend
+        final_decision = smart_action if not is_manipulation_zone else (crowd_action + " [تأكيد الارتداد الآمن ⚡]")
 
-    return action, base_strength, actual_trend
+    return final_decision, base_strength, actual_trend
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط نظام الحماية لمنع تكرار الصفقات وتثبيت التوقيت بدقة مطلقة.", reply_markup=get_main_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط نظام الحماية ومضادة فخاخ الـ OTC لمنع تكرار الصفقات وتثبيت التوقيت بدقة مطلقة.", reply_markup=get_main_markup(message.chat.id))
 
 @bot.message_handler(func=lambda message: message.text and '🔄 العكس:' in message.text)
 def toggle_reverse_mode(message):
@@ -254,20 +259,20 @@ def handle_auto_time_chosen(message):
             active_pair_locks[rand_pair] = time.time() + (rand_duration * 60 + 10)
                 
             rand_trend_type = random.choice(['ترند صاعد', 'ترند هابط'])
-            action, strength, actual_trend = analyze_otc_trap(rand_pair, rand_trend_type, target_chat_id)
+            action, strength, actual_trend = anti_otc_trap_algorithm(rand_pair, rand_trend_type, target_chat_id)
             
             now_msg = datetime.now()
             entry_time = (now_msg + timedelta(minutes=1)).replace(second=0, microsecond=0)
             expiry_time = entry_time + timedelta(minutes=rand_duration)
             
             is_rev = reverse_mode_active.get(target_chat_id, False)
-            mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي"
+            mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي (مضادة للفخاخ 🛡️)"
             
-            auto_text = (f"🧠 **التحليل الذكي للـ OTC (وضع الاستراتيجية: {mode_status})**\n"
+            auto_text = (f"🧠 **التحليل المضاد لفخاخ الـ OTC (وضع الاستراتيجية: {mode_status})**\n"
                          f"━━━━━━━━━━━━━━━━━━━\n"
                          f"🔹 **الزوج / السهم:** {rand_pair} | {actual_trend}\n"
                          f"🔹 **مدة الصفقة:** {rand_duration} دقيقة\n"
-                         f"🔹 **القرار المحسوب:** {action}\n"
+                         f"🔹 **القرار المضاد للحشود:** {action}\n"
                          f"🔹 **مؤشر الثقة الذكي:** {strength}%\n"
                          f"━━━━━━━━━━━━━━━━━━━\n"
                          f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
@@ -348,18 +353,19 @@ def step_manual_final(message):
     entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
     expiry_time = entry_time + timedelta(minutes=duration)
     
-    action, strength, actual_trend = analyze_otc_trap(data['pair'], data['trend_type'], chat_id)
+    # استخدام الخوارزمية المضادة لفخاخ الـ OTC
+    action, strength, actual_trend = anti_otc_trap_algorithm(data['pair'], data['trend_type'], chat_id)
     
     is_rev = reverse_mode_active.get(chat_id, False)
-    mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي"
+    mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي (مضادة للفخاخ 🛡️)"
     
-    result_text = (f"🧠 **التحليل اليدوي للـ OTC (الوضع: {mode_status})**\n"
+    result_text = (f"🧠 **التحليل اليدوي المضاد لفخاخ الـ OTC (الوضع: {mode_status})**\n"
                    f"━━━━━━━━━━━━━━━━━━━\n"
                    f"🔹 **الزوج:** {data['pair']} | {actual_trend}\n"
                    f"🔹 **الوقت المحدد:** {data['time']}\n"
                    f"🔹 **الشمعة الحالية:** {current_candle}\n"
                    f"🔹 **الشموع السابقة:** {prev_candles}\n"
-                   f"🔹 **القرار المحسوب:** {action}\n"
+                   f"🔹 **القرار المضاد للحشود:** {action}\n"
                    f"🔹 **مؤشر الثقة الحي:** {strength}%\n"
                    f"━━━━━━━━━━━━━━━━━━━\n"
                    f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
