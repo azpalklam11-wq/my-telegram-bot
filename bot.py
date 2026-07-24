@@ -26,20 +26,20 @@ def trading_engine():
     print("  BOT ENGINE: OTC ALGORITHM SYNCHRONIZED  ")
     print("==========================================")
     print("[+] زر البدء (Start Button): نشط وجاهز للتشغيل")
-    print("[+] تم ربط بوت تليجرام وإرسال رسالة ترحيبية...\n")
     
-    send_telegram_message("🚀 **تم تشغيل بوت التداول بنجاح!**\n- نظام مزامنة التوقيت: يعمل بدقة.\n- تم منع تكرار الرسائل.")
+    send_telegram_message("🚀 **تم تشغيل بوت التداول بنجاح!**\n- نظام مزامنة التوقيت: يعمل بدقة.\n- تم تفعيل نظام منع التكرار الصارم.")
 
-    last_sent_minute = -1  # متغير لتخزين آخر دقيقة تم إرسال رسالة فيها
+    last_execution_time = 0  # لتسجيل طابع زمن التنفيذ الأخير
 
     while True:
         now = datetime.now()
         current_second = now.second
-        current_minute = now.minute
+        current_timestamp = time.time()
         
-        # التأكد من أننا في الثانية 59 وأننا لم نرسل رسالة في هذه الدقيقة من قبل
-        if current_second == 59 and current_minute != last_sent_minute:
-            last_sent_minute = current_minute  # تحديث الدقيقة حتى لا تتكرر الرسالة
+        # الشرط الأول: الوصول للثانية 59
+        # الشرط الثاني: مرور 55 ثانية على الأقل منذ آخر عملية إرسال (يمنع التكرار جذرياً)
+        if current_second == 59 and (current_timestamp - last_execution_time) > 55:
+            last_execution_time = current_timestamp  # تحديث وقت آخر إرسال فوراً
             
             analysis_time = datetime.now()
             entry_time = analysis_time + timedelta(seconds=1)
@@ -62,7 +62,7 @@ def trading_engine():
             print(msg.replace("*", "").replace("`", ""))
             send_telegram_message(msg)
                 
-            time.sleep(1.5)  # توقف قصير لضمان تجاوز الثانية 59 بأمان
+            time.sleep(2)
         else:
             time.sleep(0.1)
 
@@ -71,4 +71,3 @@ if __name__ == "__main__":
         trading_engine()
     except KeyboardInterrupt:
         print("\n[!] تم إيقاف البوت يدوياً.")
-        send_telegram_message("⚠️ **تم إيقاف تشغيل البوت يدوياً.**")
