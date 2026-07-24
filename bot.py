@@ -1,8 +1,25 @@
 import time
 from datetime import datetime, timedelta
+import requests
+
+# بيانات التليجرام الخاصة بك
+TOKEN = "8937685397:AAFZTpk7Lz3DQZzFkLBSD2UCE9qRSECe0WQ"
+CHAT_ID = "6513565024"
+
+def send_telegram_message(message):
+    """دالة إرسال التنبيهات عبر بوت تليجرام"""
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        print(f"[!] خطأ في إرسال الرسالة لتليجرام: {e}")
 
 def calculate_trade_strength():
-    # محاكاة حساب قوة الصفقة (بين 85% و 99%)
     import random
     return random.randint(85, 99)
 
@@ -11,37 +28,46 @@ def trading_engine():
     print("  BOT ENGINE: OTC ALGORITHM SYNCHRONIZED  ")
     print("==========================================")
     print("[+] زر البدء (Start Button): نشط وجاهز للتشغيل")
-    print("[ مرحلة الاختبار (Test Mode): البوت يعمل الآن بنجاح وتستجيب خوارزمية التوقيت بدقة ]\n")
+    print("[+] تم ربط بوت تليجرام وإرسال رسالة ترحيبية...\n")
     
+    # إرسال رسالة ترحيبية عبر تليجرام عند بدء التشغيل
+    send_telegram_message("🚀 **تم تشغيل بوت التداول بنجاح!**\n- نظام مزامنة التوقيت: يعمل بدقة.\n- جاري مراقبة خوارزميات الـ OTC...")
+
     while True:
         now = datetime.now()
         current_second = now.second
         
-        # التقاط القرار في الثانية الأخيرة لضمان عدم تأخر التحليل عن الشمعة الجديدة
+        # التقاط القرار في الثانية الأخيرة لضمان عدم تأخر التحليل
         if current_second == 59:
             analysis_time = datetime.now()
             entry_time = analysis_time + timedelta(seconds=1)
             expiry_time = entry_time + timedelta(minutes=1)
             strength = calculate_trade_strength()
             
-            print(f"\n[⚡ تحليل جديد متزامن]")
-            print(f"-> وقت رصد القرار: {analysis_time.strftime('%H:%M:%S')}")
-            print(f"-> توقيت الدخول الدقيق: {entry_time.strftime('%H:%M:%S')} (بعد ثانية واحدة)")
-            print(f"-> توقيت الانتهاء: {expiry_time.strftime('%H:%M:%S')}")
-            print(f"-> قوة الصفقة: {strength}%")
+            msg = (
+                f"⚡ **تحليل جديد متزامن (OTC)**\n"
+                f"⏱ وقت الرصد: `{analysis_time.strftime('%H:%M:%S')}`\n"
+                f"🎯 توقيت الدخول: `{entry_time.strftime('%H:%M:%S')}`\n"
+                f"⌛ توقيت الانتهاء: `{expiry_time.strftime('%H:%M:%S')}`\n"
+                f"💪 قوة الصفقة: **{strength}%**\n"
+            )
             
             if strength >= 90:
-                print("[✔] تم استيفاء الشروط الخوارزمية بنجاح -> تنفيذ صفقة تجريبية الآن!")
+                msg += "🟢 **[حالة: مطابق للشروط -> تنفيذ الصفقة]**"
             else:
-                print("[✘] قوة الصفقة منخفضة -> تخطي الصفقة.")
+                msg += "🔴 **[حالة: قوة منخفضة -> تخطي]**"
+            
+            # طباعة على شاشة الهاتف وإرسالها فوراً لتليجرام
+            print(msg.replace("*", "").replace("`", ""))
+            send_telegram_message(msg)
                 
             time.sleep(2)
         else:
             time.sleep(0.1)
 
 if __name__ == "__main__":
-    print("أهلاً بك! يتم تشغيل اختبار البوت الآن...")
     try:
         trading_engine()
     except KeyboardInterrupt:
-        print("\n[!] تم إيقاف البوت يدوياً بنجاح.")
+        print("\n[!] تم إيقاف البوت يدوياً.")
+        send_telegram_message("⚠️ **تم إيقاف تشغيل البوت يدوياً.**")
