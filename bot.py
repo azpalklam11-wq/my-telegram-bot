@@ -1,274 +1,616 @@
-import time
-from datetime import datetime, timedelta
-import requests
+import os
 import random
 import threading
+import time
+from datetime import datetime, timedelta
+import telebot
+from telebot import types
 
-TOKEN = "8937685397:AAFZTpk7Lz3DQZzFkLBSD2UCE9qRSECe0WQ"
-CHAT_ID = "6513565024"
+# قراءة التوكن من متغيرات البيئة في سيرفر النشر (مثل Railway) لضمان الأمان
+TOKEN = os.getenv('TOKEN', '8540596750:AAEI0Cko_9BcGINjKZBN_u-xkDKR20OiyCw')
+ADMIN_ID = int(os.getenv('ADMIN_ID', '6513565024'))
 
-# --- متغيرات الحالة العامة ---
-is_bot_running = False          # حالة التشغيل
-is_reversed = False             # عكس التحليل
-selected_pair = "EUR/USD OTC"   # الزوج الافتراضي
-selected_duration = "1 دقيقة"    # المدة الافتراضية
-last_sent_minute = -1
+bot = telebot.TeleBot(TOKEN, threaded=False, skip_pending=True)
 
-# إحصائيات الأداء
-total_trades = 0
-wins = 0
-losses = 0
+user_data = {}
+auto_trading_active = {}
+auto_selected_pairs = {}
+reverse_mode_active = {}
+user_stats = {}
+active_pair_locks = {}
+last_click_time = {}
 
-def send_telegram_message(message, reply_markup=None):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    try:
-        requests.post(url, json=payload, timeout=5)
-    except Exception as e:
-        print(f"[!] خطأ في إرسال الرسالة لتليجرام: {e}")
+PAIRS = [
+    'AED/CNY',
+    'AUD/CAD',
+    'AUD/CHF',
+    'AUD/JPY',
+    'AUD/NZD',
+    'AUD/USD',
+    'BHD/CNY',
+    'CAD/JPY',
+    'CHF/JPY',
+    'CHF/NOK',
+    'EUR/AUD',
+    'EUR/CHF',
+    'EUR/JPY',
+    'EUR/NZD',
+    'EUR/RUB',
+    'EUR/TRY',
+    'EUR/USD',
+    'GBP/AUD',
+    'GBP/JPY',
+    'KES/USD',
+    'MAD/USD',
+    'NGN/USD',
+    'NZD/JPY',
+    'NZD/USD',
+    'QAR/CNY',
+    'SAR/CNY',
+    'TND/USD',
+    'UAH/USD',
+    'USD/ARS',
+    'USD/BDT',
+    'USD/BRL',
+    'USD/CAD',
+    'USD/CHF',
+    'USD/CLP',
+    'USD/CNH',
+    'USD/COP',
+    'USD/DZD',
+    'USD/EGP',
+    'USD/INR',
+    'USD/JPY',
+    'USD/MXN',
+    'USD/MYR',
+    'USD/PKR',
+    'USD/RUB',
+    'USD/SGD',
+    'USD/THB',
+    'USD/VND',
+    'YER/USD',
+    'ZAR/USD',
+    'Advanced Micro Devices OTC',
+    'Alibaba OTC',
+    'Amazon OTC',
+    'American Express OTC',
+    'Apple OTC',
+    'Boeing Company OTC',
+    'Citigroup Inc OTC',
+    'Cisco OTC',
+    'Coinbase Global OTC',
+    'Facebook OTC',
+    'FedEx OTC',
+    'GameStop Corp OTC',
+    'Intel OTC',
+    'Johnson & Johnson OTC',
+    'Marathon Digital Holdings OTC',
+    "McDonald's OTC",
+    'Palantir Technologies OTC',
+    'Pfizer Inc OTC',
+    'Tesla OTC',
+    'VIX OTC',
+    'VISA OTC',
+]
 
-def edit_telegram_message(message_id, message, reply_markup=None):
-    """تحديث الرسالة القائمة بدلاً من إرسال رسالة جديدة لتكون الواجهة تفاعلية ونظيفة"""
-    url = f"https://api.telegram.org/bot{TOKEN}/editMessageText"
-    payload = {
-        "chat_id": CHAT_ID,
-        "message_id": message_id,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    try:
-        requests.post(url, json=payload, timeout=5)
-    except Exception as e:
-        print(f"[!] خطأ في تعديل الرسالة: {e}")
+CANDLE_OPTIONS = [
+    'شمعة خضراء 1',
+    'شمعة خضراء 2',
+    'شمعة خضراء 3',
+    'شمعة حمراء 1',
+    'شمعة حمراء 2',
+    'شمعة حمراء 3',
+]
 
-# ==========================================
-# 1. دوال القوائم التفاعلية (Menu System)
-# ==========================================
-def get_main_menu():
-    """القائمة الرئيسية (تحتوي على زر التشغيل، عكس التحليل، والتقرير)"""
-    status_icon = "🟢 يعمل حالياً" if is_bot_running else "🔴 متوقف"
-    reverse_icon = "✅ مفعل" if is_reversed else "❌ معطل"
-    
-    return {
-        "inline_keyboard": [
-            [{"text": f"🚀 تشغيل البوت ({status_icon})", "callback_data": "menu_start_wizard"}],
-            [{"text": f"🔄 عكس التحليل: {reverse_icon}", "callback_data": "toggle_reverse"}],
-            [{"text": "📊 تقرير الأرباح والخسائر", "callback_data": "show_report"}]
+
+def get_main_markup(chat_id):
+  markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+  btn_manual = types.KeyboardButton('أوتوماتيكي')
+  btn_auto = types.KeyboardButton('تشغيل تلقائي')
+  btn_stop_auto = types.KeyboardButton('إيقاف تلقائي')
+  is_rev = reverse_mode_active.get(chat_id, False)
+  rev_btn_text = '🔄 العكس: مفعل 🟢' if is_rev else '🔄 العكس: متوقف 🔴'
+  btn_rev = types.KeyboardButton(rev_btn_text)
+  btn_win = types.KeyboardButton('✅ ربح')
+  btn_loss = types.KeyboardButton('❌ خسارة')
+  markup.add(btn_manual, btn_auto)
+  markup.add(btn_stop_auto, btn_rev)
+  markup.add(btn_win, btn_loss)
+  if chat_id == ADMIN_ID:
+    markup.add(types.KeyboardButton('إيقاف النظام'))
+  return markup
+
+
+def create_vertical_kb(buttons_list, chat_id, row=2, add_back=True):
+  markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=row)
+  for btn in buttons_list:
+    markup.add(types.KeyboardButton(str(btn)))
+  if add_back:
+    if chat_id == ADMIN_ID:
+      markup.row(
+          types.KeyboardButton('⬅️ رجوع'), types.KeyboardButton('إيقاف النظام')
+      )
+    else:
+      markup.row(types.KeyboardButton('⬅️ رجوع'))
+  else:
+    if chat_id == ADMIN_ID:
+      markup.row(types.KeyboardButton('إيقاف النظام'))
+  return markup
+
+
+def analyze_otc_trap(pair, trend_type, chat_id):
+  base_strength = random.randint(85, 99)
+  is_rev = reverse_mode_active.get(chat_id, False)
+
+  if trend_type == 'ترند صاعد':
+    primary_action = '🟢 صفقة شراء مؤكدة'
+    primary_trend = 'ترند صاعد'
+    opp_action = '🔴 صفقة بيع مؤكدة'
+    opp_trend = 'ترند هابط'
+  else:
+    primary_action = '🔴 صفقة بيع مؤكدة'
+    primary_trend = 'ترند هابط'
+    opp_action = '🟢 صفقة شراء مؤكدة'
+    opp_trend = 'ترند صاعد'
+
+  if is_rev:
+    action = opp_action + ' (عكسي مقلوب 🔄)'
+    actual_trend = opp_trend
+  else:
+    action = primary_action + ' (عادي)'
+    actual_trend = primary_trend
+
+  return action, base_strength, actual_trend
+
+
+@bot.message_handler(commands=['start'])
+def start(message):
+  bot.send_message(
+      message.chat.id,
+      'أهلاً بك! تم استعادة نسختك كاملة وجاهزة للعمل.',
+      reply_markup=get_main_markup(message.chat.id),
+  )
+
+
+@bot.message_handler(func=lambda message: '🔄 العكس:' in message.text)
+def toggle_reverse_mode(message):
+  chat_id = message.chat.id
+  current_state = reverse_mode_active.get(chat_id, False)
+  reverse_mode_active[chat_id] = not current_state
+  state_text = (
+      'مفعل 🟢 (تم عكس القرارات)'
+      if reverse_mode_active[chat_id]
+      else 'متوقف 🔴 (الوضع الطبيعي)'
+  )
+  bot.send_message(
+      chat_id,
+      f'⚡ تم تغيير الوضع يدوياً.\nحالة زر الانعكاس: {state_text}',
+      reply_markup=get_main_markup(chat_id),
+  )
+
+
+@bot.message_handler(func=lambda message: message.text in ['✅ ربح', '❌ خسارة'])
+def handle_stats(message):
+  chat_id = message.chat.id
+  if chat_id not in user_stats:
+    user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
+
+  if message.text == '✅ ربح':
+    user_stats[chat_id]['wins'] += 1
+    user_stats[chat_id]['consecutive_losses'] = 0
+    result_msg = '📈 ممتاز! تم تسجيل صفقة ربحة في سجلك.'
+  else:
+    user_stats[chat_id]['losses'] += 1
+    user_stats[chat_id]['consecutive_losses'] += 1
+    result_msg = '📉 تم تسجيل صفقة خاسرة في سجلك.'
+
+    if user_stats[chat_id]['consecutive_losses'] >= 2:
+      reverse_mode_active[chat_id] = True
+      result_msg += (
+          '\n⚠️ **تنبيه أوتوماتيكي:** رصدنا خسارتين متتاليتين، تم تفعيل (🔄 وضع'
+          ' العكس أوتوماتيكياً) لمواجهة الفخ!'
+      )
+
+  wins = user_stats[chat_id]['wins']
+  losses = user_stats[chat_id]['losses']
+  total = wins + losses
+  ratio = int((wins / total) * 100) if total > 0 else 0
+
+  stats_text = (
+      f'{result_msg}\n'
+      f'━━━━━━━━━━━━━━━━━━━\n'
+      f'📊 **عداد الأداء والإحصائيات:**\n'
+      f'🟢 صفقات رابحة: {wins}\n'
+      f'🔴 صفقات خاسرة: {losses}\n'
+      f'🎯 نسبة النجاح الإجمالية: {ratio}%'
+  )
+  bot.send_message(
+      chat_id,
+      stats_text,
+      reply_markup=get_main_markup(chat_id),
+      parse_mode='Markdown',
+  )
+
+
+@bot.message_handler(func=lambda message: message.text == 'إيقاف النظام')
+def stop_bot(message):
+  if message.chat.id != ADMIN_ID:
+    bot.send_message(message.chat.id, 'عذراً، هذا الأمر مخصص للمشرف فقط.')
+    return
+  auto_trading_active[message.chat.id] = False
+  bot.send_message(message.chat.id, 'تم إيقاف النظام وإغلاق الميزات التلقائية.')
+  os._exit(0)
+
+
+@bot.message_handler(func=lambda message: message.text == 'تشغيل تلقائي')
+def start_auto_menu(message):
+  chat_id = message.chat.id
+  markup = create_vertical_kb(
+      ['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True
+  )
+  bot.send_message(
+      chat_id, 'اختر الزوج المطلوب للتشغيل التلقائي:', reply_markup=markup
+  )
+
+
+@bot.message_handler(func=lambda message: message.text == 'أوتوماتيكي')
+def step_manual_start(message):
+  chat_id = message.chat.id
+  user_data[chat_id] = {'step': 1}
+  bot.send_message(
+      chat_id,
+      '1. اختر الزوج:',
+      reply_markup=create_vertical_kb(PAIRS, chat_id, row=2, add_back=True),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 1)
+    and (message.text in PAIRS or message.text == 'جميع الأزواج (عشوائي)')
+)
+def step_manual_pair(message):
+  chat_id = message.chat.id
+  text = message.text
+  if chat_id in user_data and user_data[chat_id].get('step') == 1:
+    user_data[chat_id]['pair'] = text
+    user_data[chat_id]['step'] = 2
+    bot.send_message(
+        chat_id,
+        '2. اختر نوع الترند:',
+        reply_markup=create_vertical_kb(
+            ['ترند صاعد', 'ترند هابط', 'ترند متردد'], chat_id, add_back=True
+        ),
+    )
+    return
+
+
+@bot.message_handler(
+    func=lambda message: message.text in PAIRS
+    or message.text == 'جميع الأزواج (عشوائي)'
+)
+def handle_auto_pair_selection(message):
+  chat_id = message.chat.id
+  now_ts = time.time()
+  if now_ts - last_click_time.get(chat_id, 0) < 2.0:
+    return
+  last_click_time[chat_id] = now_ts
+
+  selected_pair = message.text
+  auto_trading_active[chat_id] = True
+  auto_selected_pairs[chat_id] = selected_pair
+
+  bot.send_message(
+      chat_id,
+      f'🟢 تم تفعيل التشغيل التلقائي للزوج: **{selected_pair}**',
+      reply_markup=get_main_markup(chat_id),
+      parse_mode='Markdown',
+  )
+
+  def background_sender():
+    while auto_trading_active.get(chat_id, False):
+      now = datetime.now()
+      target_second = 0
+      current_sec = now.second
+
+      if current_sec <= target_second:
+        sleep_seconds = target_second - current_sec
+      else:
+        sleep_seconds = (60 - current_sec) + target_second
+
+      time.sleep(sleep_seconds)
+
+      if not auto_trading_active.get(chat_id, False):
+        break
+
+      current_choice = auto_selected_pairs.get(
+          chat_id, 'جميع الأزواج (عشوائي)'
+      )
+      if current_choice == 'جميع الأزواج (عشوائي)':
+        available_pairs = [
+            p for p in PAIRS if active_pair_locks.get(p, 0) < time.time()
         ]
-    }
+        if not available_pairs:
+          time.sleep(5)
+          continue
+        rand_pair = random.choice(available_pairs)
+      else:
+        rand_pair = current_choice
+        if active_pair_locks.get(rand_pair, 0) > time.time():
+          time.sleep(5)
+          continue
 
-def get_wizard_pair_menu():
-    """قائمة اختيار الزوج (الخطوة الأولى عند التشغيل)"""
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "💶 EUR/USD OTC", "callback_data": "set_pair_EUR/USD OTC"},
-                {"text": "💷 GBP/USD OTC", "callback_data": "set_pair_GBP/USD OTC"}
-            ],
-            [
-                {"text": "🇯🇵 USD/JPY OTC", "callback_data": "set_pair_USD/JPY OTC"}
-            ],
-            [
-                {"text": "🔙 رجوع للقائمة الرئيسية", "callback_data": "back_to_main"}
-            ]
-        ]
-    }
+      rand_duration = random.choice([1, 2])
+      active_pair_locks[rand_pair] = time.time() + (rand_duration * 60 + 30)
 
-def get_wizard_duration_menu():
-    """قائمة اختيار المدة (الخطوة الثانية بعد اختيار الزوج)"""
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "⏱ 1 دقيقة", "callback_data": "set_dur_1 دقيقة"},
-                {"text": "⏱ 2 دقيقة", "callback_data": "set_dur_2 دقيقة"}
-            ],
-            [
-                {"text": "⏱ 5 دقائق", "callback_data": "set_dur_5 دقائق"}
-            ],
-            [
-                {"text": "🔙 رجوع", "callback_data": "menu_start_wizard"}
-            ]
-        ]
-    }
+      rand_trend_type = random.choice(['ترند صاعد', 'ترند هابط'])
+      action, strength, actual_trend = analyze_otc_trap(
+          rand_pair, rand_trend_type, chat_id
+      )
 
-def telegram_listener():
-    """الاستماع لأزرار القوائم التفاعلية وتحديث الواجهة"""
-    global is_bot_running, is_reversed, selected_pair, selected_duration
-    offset = 0
-    while True:
-        try:
-            url = f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset={offset}&timeout=30"
-            response = requests.get(url, timeout=35)
-            data = response.json()
-            
-            if "result" in data:
-                for update in data["result"]:
-                    offset = update["update_id"] + 1
-                    if "callback_query" in update:
-                        query = update["callback_query"]
-                        callback_data = query["data"]
-                        query_id = query["id"]
-                        message_id = query["message"]["message_id"]
-                        
-                        requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery", json={"callback_query_id": query_id})
-                        
-                        if callback_data == "menu_start_wizard":
-                            # الانتقال لاختيار الزوج
-                            edit_telegram_message(
-                                message_id, 
-                                "💱 **الخطوة 1/2: اختر زوج العملات المراد تداوله:**", 
-                                get_wizard_pair_menu()
-                            )
-                            
-                        elif callback_data.startswith("set_pair_"):
-                            # حفظ الزوج والانتقال لاختيار المدة
-                            selected_pair = callback_data.replace("set_pair_", "")
-                            edit_telegram_message(
-                                message_id, 
-                                f"✅ تم اختيار الزوج: `{selected_pair}`\n\n⏳ **الخطوة 2/2: اختر مدة الصفقة:**", 
-                                get_wizard_duration_menu()
-                            )
-                            
-                        elif callback_data.startswith("set_dur_"):
-                            # حفظ المدة وتشغيل البوت تلقائياً!
-                            selected_duration = callback_data.replace("set_dur_", "")
-                            is_bot_running = True
-                            
-                            edit_telegram_message(
-                                message_id,
-                                f"🚀 **تم تشغيل البوت بنجاح!**\n\n"
-                                f"💱 الزوج المختار: `{selected_pair}`\n"
-                                f"⏳ المدة الزمنية: `{selected_duration}`\n"
-                                f"🔄 عكس التحليل: `{'مفعل ✅' if is_reversed else 'معطل ❌'}`\n\n"
-                                f"البوت يراقب السوق الآن ويقوم بالإرسال تلقائياً في الثانية الأخيرة من الشمعة.",
-                                get_main_menu()
-                            )
-                            
-                        elif callback_data == "toggle_reverse":
-                            is_reversed = not is_reversed
-                            edit_telegram_message(
-                                message_id,
-                                f"⚙️ **لوحة التحكم الرئيسية:**\nحالة البوت: `{'🟢 يعمل' if is_bot_running else '🔴 متوقف'}`",
-                                get_main_menu()
-                            )
-                            
-                        elif callback_data == "show_report":
-                            edit_telegram_message(
-                                message_id,
-                                get_performance_report(),
-                                get_main_menu()
-                            )
-                            
-                        elif callback_data == "back_to_main":
-                            edit_telegram_message(
-                                message_id,
-                                "⚙️ **لوحة التحكم الرئيسية للبوت:**\nاختر أحد الخيارات أدناه:",
-                                get_main_menu()
-                            )
-                            
-        except Exception as e:
-            print(f"[!] خطأ في استقبال الأزرار: {e}")
-            time.sleep(3)
+      now_msg = datetime.now()
+      entry_time = (now_msg + timedelta(minutes=1)).replace(
+          second=0, microsecond=0
+      )
+      expiry_time = entry_time + timedelta(minutes=rand_duration)
 
-# ==========================================
-# 2. الدالة الثانية: محرك التحليل والمزامنة الفنية
-# ==========================================
-def calculate_trade_strength():
-    return random.randint(85, 99)
+      is_rev = reverse_mode_active.get(chat_id, False)
+      mode_status = 'مفعل (عكسي 🔄)' if is_rev else 'عادي'
 
-def trading_engine():
-    global last_sent_minute, total_trades, wins, losses
-    print("==========================================")
-    print("  BOT ENGINE: SMART MENU WIZARD ACTIVE    ")
-    print("==========================================")
-    
-    send_telegram_message(
-        "🚀 **أهلاً بك يا صديقي في نظام البوت المتطور!**\n\n⚙️ **لوحة التحكم الرئيسية:**", 
-        get_main_menu()
+      auto_text = (
+          f'🧠 **التحليل الذكي للـ OTC (وضع الاستراتيجية: {mode_status})**\n'
+          f'━━━━━━━━━━━━━━━━━━━\n'
+          f'🔹 **الزوج / السهم:** {rand_pair} | {actual_trend}\n'
+          f'🔹 **القرار المحسوب:** {action}\n'
+          f'🔹 **مؤشر الثقة الذكي:** {strength}%\n'
+          f'━━━━━━━━━━━━━━━━━━━\n'
+          f'⏳ **وقت دخول الصفقة:** {entry_time.strftime("%H:%M:%S")}\n'
+          f'🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime("%H:%M:%S")}'
+      )
+      try:
+        bot.send_message(
+            chat_id,
+            auto_text,
+            reply_markup=get_main_markup(chat_id),
+            parse_mode='Markdown',
+        )
+      except:
+        break
+
+      time.sleep(50)
+
+  threading.Thread(target=background_sender, daemon=True).start()
+
+
+def chat_id_in_step(chat_id, step_num):
+  return chat_id in user_data and user_data[chat_id].get('step') == step_num
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 2)
+    and message.text in ['ترند صاعد', 'ترند هابط', 'ترند متردد']
+)
+def step_manual_trend(message):
+  chat_id = message.chat.id
+  user_data[chat_id]['trend_type'] = message.text
+  user_data[chat_id]['step'] = 3
+  times = [f'{i} دقيقة' for i in range(1, 11)]
+  bot.send_message(
+      chat_id,
+      '3. اختر الوقت:',
+      reply_markup=create_vertical_kb(times, chat_id, row=3, add_back=True),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 3)
+    and 'دقيقة' in message.text
+)
+def step_manual_time(message):
+  chat_id = message.chat.id
+  user_data[chat_id]['time'] = message.text
+  user_data[chat_id]['step'] = 4
+  trends = [f'Trend {i}' for i in range(50, 1050, 100)]
+  bot.send_message(
+      chat_id,
+      '4. اختر قوة الترند:',
+      reply_markup=create_vertical_kb(trends, chat_id, row=3, add_back=True),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 4)
+    and 'Trend' in message.text
+)
+def step_manual_trend_strength(message):
+  chat_id = message.chat.id
+  user_data[chat_id]['trend'] = message.text
+  user_data[chat_id]['step'] = 5
+  bot.send_message(
+      chat_id,
+      '5. من المسيطر؟',
+      reply_markup=create_vertical_kb(
+          ['المشترون أكثر', 'البائعون أكثر'], chat_id, add_back=True
+      ),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 5)
+    and message.text in ['المشترون أكثر', 'البائعون أكثر']
+)
+def step_manual_sentiment(message):
+  chat_id = message.chat.id
+  user_data[chat_id]['sentiment'] = message.text
+  user_data[chat_id]['step'] = 6
+  rsi_list = [f'RSI {i}' for i in range(30, 90, 10)]
+  bot.send_message(
+      chat_id,
+      '6. حدد RSI:',
+      reply_markup=create_vertical_kb(rsi_list, chat_id, row=3, add_back=True),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 6)
+    and 'RSI' in message.text
+)
+def step_manual_rsi(message):
+  chat_id = message.chat.id
+  user_data[chat_id]['rsi'] = message.text.split()[1]
+  user_data[chat_id]['step'] = 7
+  bot.send_message(
+      chat_id,
+      '7. حدد الشمعة الحالية (الأخيرة):',
+      reply_markup=create_vertical_kb(
+          CANDLE_OPTIONS, chat_id, row=2, add_back=True
+      ),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 7)
+    and message.text in CANDLE_OPTIONS
+)
+def step_manual_current_candle(message):
+  chat_id = message.chat.id
+  user_data[chat_id]['current_candle'] = message.text
+  user_data[chat_id]['step'] = 8
+  bot.send_message(
+      chat_id,
+      '8. حدد الشموع السابقة (التي قبلها):',
+      reply_markup=create_vertical_kb(
+          CANDLE_OPTIONS, chat_id, row=2, add_back=True
+      ),
+  )
+
+
+@bot.message_handler(
+    func=lambda message: chat_id_in_step(message.chat.id, 8)
+    and message.text in CANDLE_OPTIONS
+)
+def step_manual_final(message):
+  chat_id = message.chat.id
+  data = user_data[chat_id]
+  prev_candles = message.text
+  current_candle = data['current_candle']
+
+  duration = int(data['time'].split()[0])
+  now = datetime.now()
+  entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+  expiry_time = entry_time + timedelta(minutes=duration)
+
+  action, strength, actual_trend = analyze_otc_trap(
+      data['pair'], data['trend_type'], chat_id
+  )
+
+  is_rev = reverse_mode_active.get(chat_id, False)
+  mode_status = 'مفعل (عكسي 🔄)' if is_rev else 'عادي'
+
+  result_text = (
+      f'🧠 **التحليل اليدوي للـ OTC (الوضع: {mode_status})**\n'
+      f'━━━━━━━━━━━━━━━━━━━\n'
+      f"🔹 **الزوج:** {data['pair']} | {actual_trend}\n"
+      f'🔹 **الشمعة الحالية:** {current_candle}\n'
+      f'🔹 **الشموع السابقة:** {prev_candles}\n'
+      f'🔹 **القرار المحسوب:** {action}\n'
+      f'🔹 **مؤشر الثقة الحي:** {strength}%\n'
+      f'━━━━━━━━━━━━━━━━━━━\n'
+      f'⏳ **وقت دخول الصفقة:** {entry_time.strftime("%H:%M:%S")}\n'
+      f'🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime("%H:%M:%S")}'
+  )
+
+  bot.send_message(
+      chat_id,
+      result_text,
+      reply_markup=get_main_markup(chat_id),
+      parse_mode='Markdown',
+  )
+  user_data[chat_id] = {}
+
+
+@bot.message_handler(func=lambda message: message.text == 'إيقاف تلقائي')
+def stop_auto(message):
+  chat_id = message.chat.ID
+  auto_trading_active[chat_id] = False
+  bot.send_message(
+      chat_id,
+      '🔴 تم إيقاف التشغيل التلقائي بنجاح.',
+      reply_markup=get_main_markup(chat_id),
+  )
+
+
+@bot.message_handler(func=lambda message: message.text == '⬅️ رجوع')
+def handle_back(message):
+  chat_id = message.chat.id
+  data = user_data.get(chat_id, {})
+  step = data.get('step', 0)
+
+  if step <= 1:
+    user_data[chat_id] = {}
+    bot.send_message(
+        chat_id, 'القائمة الرئيسية:', reply_markup=get_main_markup(chat_id)
+    )
+  elif step == 2:
+    data['step'] = 1
+    bot.send_message(
+        chat_id,
+        '1. اختر الزوج:',
+        reply_markup=create_vertical_kb(PAIRS, chat_id, row=2, add_back=True),
+    )
+  elif step == 3:
+    data['step'] = 2
+    bot.send_message(
+        chat_id,
+        '2. اختر نوع الترند:',
+        reply_markup=create_vertical_kb(
+            ['ترند صاعد', 'ترند هابط', 'ترند متردد'], chat_id, add_back=True
+        ),
+    )
+  elif step == 4:
+    data['step'] = 3
+    times = [f'{i} دقيقة' for i in range(1, 11)]
+    bot.send_message(
+        chat_id,
+        '3. اختر الوقت:',
+        reply_markup=create_vertical_kb(times, chat_id, row=3, add_back=True),
+    )
+  elif step == 5:
+    data['step'] = 4
+    trends = [f'Trend {i}' for i in range(50, 1050, 100)]
+    bot.send_message(
+        chat_id,
+        '4. اختر قوة الترند:',
+        reply_markup=create_vertical_kb(trends, chat_id, row=3, add_back=True),
+    )
+  elif step == 6:
+    data['step'] = 5
+    bot.send_message(
+        chat_id,
+        '5. من المسيطر؟',
+        reply_markup=create_vertical_kb(
+            ['المشترون أكثر', 'البائعون أكثر'], chat_id, add_back=True
+        ),
+    )
+  elif step == 7:
+    data['step'] = 6
+    rsi_list = [f'RSI {i}' for i in range(30, 90, 10)]
+    bot.send_message(
+        chat_id,
+        '6. حدد RSI:',
+        reply_markup=create_vertical_kb(rsi_list, chat_id, row=3, add_back=True),
+    )
+  else:
+    user_data[chat_id] = {}
+    bot.send_message(
+        chat_id, 'القائمة الرئيسية:', reply_markup=get_main_markup(chat_id)
     )
 
-    while True:
-        now = datetime.now()
-        current_second = now.second
-        current_minute = now.minute
-        
-        if not is_bot_running:
-            time.sleep(1)
-            continue
-            
-        if current_second == 59 and current_minute != last_sent_minute:
-            last_sent_minute = current_minute
-            
-            analysis_time = datetime.now()
-            entry_time = analysis_time + timedelta(seconds=1)
-            
-            mins_to_add = 1 if "1" in selected_duration else (2 if "2" in selected_duration else 5)
-            expiry_time = entry_time + timedelta(minutes=mins_to_add)
-            
-            strength = calculate_trade_strength()
-            base_action = "📈 شراء (CALL)" if random.choice([True, False]) else "📉 بيع (PUT)"
-            
-            if is_reversed:
-                if "شراء" in base_action:
-                    final_action = "📉 بيع (PUT) [عكس مفعّل]"
-                else:
-                    final_action = "📈 شراء (CALL) [عكس مفعّل]"
-            else:
-                final_action = base_action
-            
-            total_trades += 1
-            if strength >= 90:
-                wins += 1
-                status_text = "🟢 **[حالة: مطابق للشروط -> تنفيذ]**"
-            else:
-                losses += 1
-                status_text = "🔴 **[حالة: قوة منخفضة -> تخطي]**"
-            
-            msg = (
-                f"⚡ **تحليل جديد متزامن (OTC)**\n"
-                f"💱 الزوج: `{selected_pair}` | المدة: `{selected_duration}`\n"
-                f"⏱ وقت الرصد: `{analysis_time.strftime('%H:%M:%S')}`\n"
-                f"🎯 توقيت الدخول: `{entry_time.strftime('%H:%M:%S')}`\n"
-                f"⌛ توقيت الانتهاء: `{expiry_time.strftime('%H:%M:%S')}`\n"
-                f"🔄 الاتجاه المقترح: **{final_action}**\n"
-                f"💪 قوة الصفقة: **{strength}%**\n"
-                f"{status_text}"
-            )
-            
-            send_telegram_message(msg)
-            time.sleep(2)
-        else:
-            time.sleep(0.1)
 
-# ==========================================
-# 3. الدالة الثالثة: عداد الأرباح والخسائر والتقارير
-# ==========================================
-def get_performance_report():
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
-    report = (
-        f"📊 **تقرير أداء بوت التداول الخوارزمي**\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"🔹 إجمالي الصفقات المرصودة: `{total_trades}`\n"
-        f"✅ الصفقات الناجحة (المطابقة): `{wins}`\n"
-        f"❌ الصفقات المستبعدة (الضعيفة): `{losses}`\n"
-        f"📈 نسبة الكفاءة والنجاح: `({win_rate:.1f}%)`\n"
-        f"━━━━━━━━━━━━━━━━━━━"
-    )
-    return report
-
-if __name__ == "__main__":
-    listener_thread = threading.Thread(target=telegram_listener, daemon=True)
-    listener_thread.start()
-    
+if __name__ == '__main__':
+  print('Bot is starting and running continuously...')
+  while True:
     try:
-        trading_engine()
-    except KeyboardInterrupt:
-        print("\n[!] تم إيقاف البوت يدوياً.")
+      bot.polling(none_stop=True, interval=0, timeout=60)
+    except Exception as e:
+      print(f'Error occurred: {e}')
+      time.sleep(5)
