@@ -2,12 +2,10 @@ import time
 from datetime import datetime, timedelta
 import requests
 
-# بيانات التليجرام الخاصة بك
 TOKEN = "8937685397:AAFZTpk7Lz3DQZzFkLBSD2UCE9qRSECe0WQ"
 CHAT_ID = "6513565024"
 
 def send_telegram_message(message):
-    """دالة إرسال التنبيهات عبر بوت تليجرام"""
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -30,15 +28,19 @@ def trading_engine():
     print("[+] زر البدء (Start Button): نشط وجاهز للتشغيل")
     print("[+] تم ربط بوت تليجرام وإرسال رسالة ترحيبية...\n")
     
-    # إرسال رسالة ترحيبية عبر تليجرام عند بدء التشغيل
-    send_telegram_message("🚀 **تم تشغيل بوت التداول بنجاح!**\n- نظام مزامنة التوقيت: يعمل بدقة.\n- جاري مراقبة خوارزميات الـ OTC...")
+    send_telegram_message("🚀 **تم تشغيل بوت التداول بنجاح!**\n- نظام مزامنة التوقيت: يعمل بدقة.\n- تم منع تكرار الرسائل.")
+
+    last_sent_minute = -1  # متغير لتخزين آخر دقيقة تم إرسال رسالة فيها
 
     while True:
         now = datetime.now()
         current_second = now.second
+        current_minute = now.minute
         
-        # التقاط القرار في الثانية الأخيرة لضمان عدم تأخر التحليل
-        if current_second == 59:
+        # التأكد من أننا في الثانية 59 وأننا لم نرسل رسالة في هذه الدقيقة من قبل
+        if current_second == 59 and current_minute != last_sent_minute:
+            last_sent_minute = current_minute  # تحديث الدقيقة حتى لا تتكرر الرسالة
+            
             analysis_time = datetime.now()
             entry_time = analysis_time + timedelta(seconds=1)
             expiry_time = entry_time + timedelta(minutes=1)
@@ -57,11 +59,10 @@ def trading_engine():
             else:
                 msg += "🔴 **[حالة: قوة منخفضة -> تخطي]**"
             
-            # طباعة على شاشة الهاتف وإرسالها فوراً لتليجرام
             print(msg.replace("*", "").replace("`", ""))
             send_telegram_message(msg)
                 
-            time.sleep(2)
+            time.sleep(1.5)  # توقف قصير لضمان تجاوز الثانية 59 بأمان
         else:
             time.sleep(0.1)
 
