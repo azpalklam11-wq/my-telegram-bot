@@ -37,13 +37,13 @@ def send_telegram_message(message, reply_markup=None):
 # 1. الدالة الأولى: التحكم الرئيسي والواجهة والأزرار
 # ==========================================
 def get_main_control_keyboard():
-    status_icon = "🟢 يعمل" متى else "🔴 متوقف"
+    status_text = "🟢 تشغيل" if is_bot_running else "🔴 إيقاف"
     reverse_icon = "✅ مفعل" if is_reversed else "❌ معطل"
     
     return {
         "inline_keyboard": [
             [
-                {"text": f"الحالة: {('🟢 تشغيل' if is_bot_running else '🔴 إيقاف')}", "callback_data": "toggle_power"}
+                {"text": f"الحالة: {status_text}", "callback_data": "toggle_power"}
             ],
             [
                 {"text": f"💱 الزوج: {selected_pair}", "callback_data": "change_pair"},
@@ -89,7 +89,6 @@ def telegram_listener():
                             send_telegram_message(rev_msg, get_main_control_keyboard())
                             
                         elif callback_data == "change_pair":
-                            # تبديل سريع بين الأزواج للتجربة
                             pairs = ["EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC"]
                             current_idx = pairs.index(selected_pair) if selected_pair in pairs else 0
                             selected_pair = pairs[(current_idx + 1) % len(pairs)]
@@ -127,28 +126,22 @@ def trading_engine():
         current_second = now.second
         current_minute = now.minute
         
-        # إذا كان البوت متوقفاً، انتظر ولا ترسل شيئاً
         if not is_bot_running:
             time.sleep(1)
             continue
             
-        # مراقبة الثانية 59 بدقة للتنفيذ التلقائي
         if current_second == 59 and current_minute != last_sent_minute:
             last_sent_minute = current_minute
             
             analysis_time = datetime.now()
             entry_time = analysis_time + timedelta(seconds=1)
             
-            # حساب وقت الانتهاء بناءً على المدة المختارة
             mins_to_add = 1 if "1" in selected_duration else (2 if "2" in selected_duration else 5)
             expiry_time = entry_time + timedelta(minutes=mins_to_add)
             
             strength = calculate_trade_strength()
-            
-            # تحديد الاتجاه (شراء / بيع)
             base_action = "📈 شراء (CALL)" if random.choice([True, False]) else "📉 بيع (PUT)"
             
-            # تطبيق زر (عكس التحليل) إذا كان مفعلاً
             if is_reversed:
                 if "شراء" in base_action:
                     final_action = "📉 بيع (PUT) [عكس مفعّل]"
@@ -158,7 +151,6 @@ def trading_engine():
                 final_action = base_action
             
             total_trades += 1
-            # محاكاة بسيطة للنتيجة لعداد الأرباح (لغرض العرض)
             if strength >= 90:
                 wins += 1
                 status_text = "🟢 **[حالة: مطابق للشروط -> تنفيذ]**"
@@ -200,7 +192,6 @@ def get_performance_report():
     return report
 
 if __name__ == "__main__":
-    # تشغيل مراقب الأزرار في خلفية مستقلة
     listener_thread = threading.Thread(target=telegram_listener, daemon=True)
     listener_thread.start()
     
