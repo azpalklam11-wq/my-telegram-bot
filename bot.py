@@ -6,8 +6,8 @@ import os
 import threading
 import random
 
-# قراءة التوكن ومعرف الأدمن من بيئة الاستضافة بأمان (مع وضع القيم كاحتياطي)
-TOKEN = os.getenv('TOKEN', '8540596750:AAEI0Cko_9BcGINjKZBN_u-xkDKR20OiyCw')
+# قراءة التوكن ومعرف الأدمن الجديد من بيئة الاستضافة بأمان (مع وضع القيم كاحتياطي)
+TOKEN = os.getenv('TOKEN', '8937685397:AAFZTpk7Lz3DQZzFkLBSD2UCE9qRSECe0WQ')
 ADMIN_ID = int(os.getenv('ADMIN_ID', '6513565024'))
 
 bot = telebot.TeleBot(TOKEN, threaded=False, skip_pending=True)
