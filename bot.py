@@ -9,12 +9,12 @@ CHAT_ID = "6513565024"
 
 # --- متغيرات الحالة العامة ---
 is_bot_running = False          # حالة التشغيل والإيقاف
-is_reversed = False             # زر عكس التحليل (افتراضياً غير مفعل)
+is_reversed = False             # زر عكس التحليل
 selected_pair = "EUR/USD OTC"   # الزوج الافتراضي
 selected_duration = "1 دقيقة"    # المدة الافتراضية
 last_sent_minute = -1
 
-# إحصائيات الأداء (عداد الربح والخسارة)
+# إحصائيات الأداء
 total_trades = 0
 wins = 0
 losses = 0
@@ -34,32 +34,25 @@ def send_telegram_message(message, reply_markup=None):
         print(f"[!] خطأ في إرسال الرسالة لتليجرام: {e}")
 
 # ==========================================
-# 1. الدالة الأولى: التحكم الرئيسي والواجهة والأزرار
+# لوحة المفاتيح الثابتة (Reply Keyboard) أسفل الشات
 # ==========================================
-def get_main_control_keyboard():
-    status_text = "🟢 تشغيل" if is_bot_running else "🔴 إيقاف"
-    reverse_icon = "✅ مفعل" if is_reversed else "❌ معطل"
+def get_persistent_keyboard():
+    status_text = "🟢 تشغيل البوت" if not is_bot_running else "🔴 إيقاف البوت"
+    reverse_text = "✅ عكس التحليل: مفعل" if is_reversed else "❌ عكس التحليل: معطل"
     
     return {
-        "inline_keyboard": [
-            [
-                {"text": f"الحالة: {status_text}", "callback_data": "toggle_power"}
-            ],
-            [
-                {"text": f"💱 الزوج: {selected_pair}", "callback_data": "change_pair"},
-                {"text": f"⏳ المدة: {selected_duration}", "callback_data": "change_duration"}
-            ],
-            [
-                {"text": f"🔄 عكس التحليل: {reverse_icon}", "callback_data": "toggle_reverse"}
-            ],
-            [
-                {"text": "📊 تقرير الأرباح والخسائر", "callback_data": "show_report"}
-            ]
-        ]
+        "keyboard": [
+            [{"text": status_text}],
+            [{"text": f"💱 الزوج: {selected_pair}"}, {"text": f"⏳ المدة: {selected_duration}"}],
+            [{"text": reverse_text}],
+            [{"text": "📊 تقرير الأرباح والخسائر"}]
+        ],
+        "resize_keyboard": True,   # جعل الأزرار متناسقة وصغيرة
+        "is_persistent": True      # إبقاء الأزرار ظاهرة وثابتة دائماً
     }
 
 def telegram_listener():
-    """الاستماع لأوامر الأزرار التفاعلية من تليجرام"""
+    """الاستماع للأوامر عند الضغط على الأزرار الثابتة"""
     global is_bot_running, is_reversed, selected_pair, selected_duration
     offset = 0
     while True:
@@ -71,40 +64,40 @@ def telegram_listener():
             if "result" in data:
                 for update in data["result"]:
                     offset = update["update_id"] + 1
-                    if "callback_query" in update:
-                        query = update["callback_query"]
-                        callback_data = query["data"]
-                        query_id = query["id"]
+                    
+                    # التحقق من الرسائل النصية القادمة من الأزرار الثابتة
+                    if "message" in update and "text" in update["message"]:
+                        text = update["message"]["text"]
                         
-                        requests.post(f"https://api.telegram.org/bot{TOKEN}/answerCallbackQuery", json={"callback_query_id": query_id})
-                        
-                        if callback_data == "toggle_power":
-                            is_bot_running = not is_bot_running
-                            state_msg = "🟢 **تم تشغيل البوت وبدء رصد الصفقات.**" if is_bot_running else "🔴 **تم إيقاف البوت مؤقتاً.**"
-                            send_telegram_message(state_msg, get_main_control_keyboard())
+                        if "تشغيل البوت" in text:
+                            is_bot_running = True
+                            send_telegram_message("🟢 **تم تشغيل البوت وبدء رصد الصفقات بنجاح.**", get_persistent_keyboard())
+                        elif "إيقاف البوت" in text:
+                            is_bot_running = False
+                            send_telegram_message("🔴 **تم إيقاف البوت مؤقتاً.**", get_persistent_keyboard())
                             
-                        elif callback_data == "toggle_reverse":
+                        elif "عكس التحليل" in text:
                             is_reversed = not is_reversed
-                            rev_msg = "🔄 **تم تفعيل (عكس التحليل):** سيتم عكس الإشارات (شراء <-> بيع)." if is_reversed else "🔄 **تم إلغاء (عكس التحليل):** الإشارات تعمل بالوضع الطبيعي."
-                            send_telegram_message(rev_msg, get_main_control_keyboard())
+                            state_str = "مفعل ✅" if is_reversed else "معطل ❌"
+                            send_telegram_message(f"🔄 **تم تغيير وضع (عكس التحليل):** أصبح الآن `{state_str}`", get_persistent_keyboard())
                             
-                        elif callback_data == "change_pair":
+                        elif "💱 الزوج:" in text:
                             pairs = ["EUR/USD OTC", "GBP/USD OTC", "USD/JPY OTC"]
                             current_idx = pairs.index(selected_pair) if selected_pair in pairs else 0
                             selected_pair = pairs[(current_idx + 1) % len(pairs)]
-                            send_telegram_message(f"💱 **تم تغيير الزوج إلى:** `{selected_pair}`", get_main_control_keyboard())
+                            send_telegram_message(f"💱 **تم تغيير الزوج إلى:** `{selected_pair}`", get_persistent_keyboard())
                             
-                        elif callback_data == "change_duration":
+                        elif "⏳ المدة:" in text:
                             durations = ["1 دقيقة", "2 دقيقة", "5 دقائق"]
                             current_idx = durations.index(selected_duration) if selected_duration in durations else 0
                             selected_duration = durations[(current_idx + 1) % len(durations)]
-                            send_telegram_message(f"⏳ **تم تغيير مدة الصفقة إلى:** `{selected_duration}`", get_main_control_keyboard())
+                            send_telegram_message(f"⏳ **تم تغيير مدة الصفقة إلى:** `{selected_duration}`", get_persistent_keyboard())
                             
-                        elif callback_data == "show_report":
-                            send_telegram_message(get_performance_report(), get_main_control_keyboard())
+                        elif "تقرير الأرباح" in text:
+                            send_telegram_message(get_performance_report(), get_persistent_keyboard())
                             
         except Exception as e:
-            print(f"[!] خطأ في استقبال الأزرار: {e}")
+            print(f"[!] خطأ في استقبال الأوامر: {e}")
             time.sleep(3)
 
 # ==========================================
@@ -116,10 +109,10 @@ def calculate_trade_strength():
 def trading_engine():
     global last_sent_minute, total_trades, wins, losses
     print("==========================================")
-    print("  BOT ENGINE: 3-TIERS STRUCTURE ACTIVE    ")
+    print("  BOT ENGINE: PERSISTENT KEYS ACTIVE      ")
     print("==========================================")
     
-    send_telegram_message("🚀 **تم إقلاع البوت بنجاح!**\n- الهيكل المكون من 3 دوال نشط وجاهز.\n- استخدم لوحة التحكم أدناه:", get_main_control_keyboard())
+    send_telegram_message("🚀 **تم إقلاع البوت بنجاح!**\n- الأزرار الرئيسية أصبحت **ثابتة** أسفل الشات الآن.", get_persistent_keyboard())
 
     while True:
         now = datetime.now()
@@ -169,7 +162,7 @@ def trading_engine():
                 f"{status_text}"
             )
             
-            send_telegram_message(msg, get_main_control_keyboard())
+            send_telegram_message(msg, get_persistent_keyboard())
             time.sleep(2)
         else:
             time.sleep(0.1)
@@ -187,7 +180,7 @@ def get_performance_report():
         f"❌ الصفقات المستبعدة (الضعيفة): `{losses}`\n"
         f"📈 نسبة الكفاءة والنجاح: `({win_rate:.1f}%)`\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"💡 النظام يعمل بكفاءة تامة عبر منصة Railway."
+        f"💡 الأزرار الثابتة جاهزة للتحكم الفوري."
     )
     return report
 
