@@ -44,23 +44,34 @@ CANDLE_OPTIONS = [
 def get_bottom_fixed_keyboard(chat_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     
+    # زر البوابة أو الغرفة الرئيسية في الأسفل
+    btn_control_panel = types.KeyboardButton("⚙️ لوحة التحكم التلقائي")
+    btn_manual = types.KeyboardButton("أوتوماتيكي 📊")
+    btn_win = types.KeyboardButton("ربح ✅")
+    btn_loss = types.KeyboardButton("خسارة ❌")
+
+    markup.row(btn_control_panel)
+    markup.row(btn_manual)
+    markup.row(btn_win, btn_loss)
+    
+    return markup
+
+def get_control_panel_keyboard(chat_id):
+    # الأزرار الثلاثة داخل "الغرفة" أو القائمة التي تظهر عند الضغط على زر اللوحة
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    
     is_rev = reverse_mode_active.get(chat_id, False)
     rev_text = "العكس: مفعل 🟢" if is_rev else "العكس: متوقف 🔴"
 
-    # وضع كل زر في صف منفصل تماماً (زر واحد في كل سطر لضمان عدم اندماجهم)
     btn_start_auto = types.KeyboardButton("تشغيل تلقائي 🚀")
     btn_stop_auto = types.KeyboardButton("إيقاف تلقائي ⏹️")
     btn_rev = types.KeyboardButton(rev_text)
-    btn_manual = types.KeyboardButton("أوتوماتيكي 📊")
-    
-    btn_win = types.KeyboardButton("ربح ✅")
-    btn_loss = types.KeyboardButton("خسارة ❌")
+    btn_back_main = types.KeyboardButton("⬅️ رجوع للقائمة الرئيسية")
 
     markup.row(btn_start_auto)
     markup.row(btn_stop_auto)
     markup.row(btn_rev)
-    markup.row(btn_manual)
-    markup.row(btn_win, btn_loss)
+    markup.row(btn_back_main)
     
     return markup
 
@@ -98,18 +109,24 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط القائمة لتظهر الأزرار الثلاثة بشكل عمودي كامل (كل زر في سطر منفصل):", reply_markup=get_bottom_fixed_keyboard(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! اضغط على زر '⚙️ لوحة التحكم التلقائي' بالأسفل لفتح غرفة التحكم الخاصة بالتشغيل والعكس:", reply_markup=get_bottom_fixed_keyboard(message.chat.id))
 
 @bot.message_handler(func=lambda message: True)
 def handle_text_messages(message):
     chat_id = message.chat.id
     text = message.text
 
-    if text == "العكس: مفعل 🟢" or text == "العكس: متوقف 🔴":
+    if text == "⚙️ لوحة التحكم التلقائي":
+        bot.send_message(chat_id, "📁 تم فتح غرفة التحكم التلقائي:", reply_markup=get_control_panel_keyboard(chat_id))
+
+    elif text == "⬅️ رجوع للقائمة الرئيسية":
+        bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_bottom_fixed_keyboard(chat_id))
+
+    elif text == "العكس: مفعل 🟢" or text == "العكس: متوقف 🔴":
         current_state = reverse_mode_active.get(chat_id, False)
         reverse_mode_active[chat_id] = not current_state
         state_text = "مفعل 🟢" if reverse_mode_active[chat_id] else "متوقف 🔴"
-        bot.send_message(chat_id, f"تم تغيير وضع العكس إلى: {state_text}", reply_markup=get_bottom_fixed_keyboard(chat_id))
+        bot.send_message(chat_id, f"تم تغيير وضع العكس إلى: {state_text}", reply_markup=get_control_panel_keyboard(chat_id))
 
     elif text == "تشغيل تلقائي 🚀":
         user_data[chat_id] = {'auto_step': 'select_pair'}
@@ -118,7 +135,7 @@ def handle_text_messages(message):
 
     elif text == "إيقاف تلقائي ⏹️":
         auto_trading_active[chat_id] = False
-        bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_bottom_fixed_keyboard(chat_id))
+        bot.send_message(chat_id, "🔴 تم إيقاف التشغيل التلقائي بنجاح.", reply_markup=get_control_panel_keyboard(chat_id))
 
     elif text == "أوتوماتيكي 📊":
         user_data[chat_id] = {'step': 1}
@@ -168,7 +185,7 @@ def handle_text_messages(message):
         auto_selected_pairs[chat_id] = selected_pair
         auto_selected_durations[chat_id] = selected_time_text
         
-        bot.send_message(chat_id, f"🚀 تم بدء التشغيل التلقائي بنجاح!\n🔹 الزوج: **{selected_pair}**\n🔹 الوقت: **{selected_time_text}**", reply_markup=get_bottom_fixed_keyboard(chat_id), parse_mode="Markdown")
+        bot.send_message(chat_id, f"🚀 تم بدء التشغيل التلقائي بنجاح!\n🔹 الزوج: **{selected_pair}**\n🔹 الوقت: **{selected_time_text}**", reply_markup=get_control_panel_keyboard(chat_id), parse_mode="Markdown")
         user_data[chat_id] = {}
 
         def background_sender(target_chat_id):
@@ -213,7 +230,7 @@ def handle_text_messages(message):
                              f"⏳ **الدخول:** {entry_time.strftime('%H:%M:%S')}\n"
                              f"🏁 **الانتهاء:** {expiry_time.strftime('%H:%M:%S')}")
                 try:
-                    bot.send_message(target_chat_id, auto_text, reply_markup=get_bottom_fixed_keyboard(target_chat_id), parse_mode="Markdown")
+                    bot.send_message(target_chat_id, auto_text, reply_markup=get_control_panel_keyboard(target_chat_id), parse_mode="Markdown")
                 except:
                     break
                 time.sleep(2.5)
