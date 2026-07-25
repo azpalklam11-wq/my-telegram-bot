@@ -98,7 +98,7 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم منع التكرار وضبط كافة خصائص البوت بنجاح.", reply_markup=get_main_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط كافة خصائص البوت بنجاح.", reply_markup=get_main_markup(message.chat.id))
 
 @bot.message_handler(func=lambda message: message.text and '🔄 العكس:' in message.text)
 def toggle_reverse_mode(message):
@@ -112,20 +112,14 @@ def toggle_reverse_mode(message):
 def handle_stats(message):
     chat_id = message.chat.id
     if chat_id not in user_stats:
-        user_stats[chat_id] = {'wins': 0, 'losses': 0, 'consecutive_losses': 0}
+        user_stats[chat_id] = {'wins': 0, 'losses': 0}
         
     if message.text == '✅ ربح':
         user_stats[chat_id]['wins'] += 1
-        user_stats[chat_id]['consecutive_losses'] = 0
         result_msg = "📈 ممتاز! تم تسجيل صفقة ربحة في سجلك."
     else:
         user_stats[chat_id]['losses'] += 1
-        user_stats[chat_id]['consecutive_losses'] += 1
         result_msg = "📉 تم تسجيل صفقة خاسرة في سجلك."
-        
-        if user_stats[chat_id]['consecutive_losses'] >= 2:
-            reverse_mode_active[chat_id] = True
-            result_msg += "\n⚠️ **تنبيه أوتوماتيكي:** رصدنا خسارتين متتاليتين، تم تفعيل (🔄 وضع العكس أوتوماتيكياً) لمواجهة الفخ!"
 
     wins = user_stats[chat_id]['wins']
     losses = user_stats[chat_id]['losses']
