@@ -208,7 +208,7 @@ def handle_auto_time_chosen(message):
 
             now = datetime.now()
             target_time = now.replace(second=40, microsecond=0)
-            if now.second >= 40:
+            if now.second >= 55:
                 target_time = target_time + timedelta(minutes=1)
                 
             sleep_seconds = (target_time - datetime.now()).total_seconds()
