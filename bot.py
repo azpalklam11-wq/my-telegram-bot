@@ -78,21 +78,21 @@ def analyze_otc_trap(pair, trend_type, chat_id):
     is_rev = reverse_mode_active.get(chat_id, False)
 
     if trend_type == "ترند صاعد":
-        primary_action = "🟢 صفقة شراء مؤكدة"
+        primary_action = "🟢 شراء"
         primary_trend = "ترند صاعد"
-        opp_action = "🔴 صفقة بيع مؤكدة"
+        opp_action = "🔴 بيع"
         opp_trend = "ترند هابط"
     else:
-        primary_action = "🔴 صفقة بيع مؤكدة"
+        primary_action = "🔴 بيع"
         primary_trend = "ترند هابط"
-        opp_action = "🟢 صفقة شراء مؤكدة"
+        opp_action = "🟢 شراء"
         opp_trend = "ترند صاعد"
 
     if is_rev:
-        action = opp_action + " (عكسي مقلوب 🔄)"
+        action = opp_action + " (عكسي 🔄)"
         actual_trend = opp_trend
     else:
-        action = primary_action + " (عادي)"
+        action = primary_action
         actual_trend = primary_trend
 
     return action, base_strength, actual_trend
@@ -238,19 +238,17 @@ def handle_auto_time_step(message):
             entry_time = (now_msg + timedelta(minutes=1)).replace(second=0, microsecond=0)
             expiry_time = entry_time + timedelta(minutes=rand_duration)
             
-            is_rev = reverse_mode_active.get(chat_id, False)
-            mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي"
-            
-            auto_text = (f"🧠 **التحليل الذكي للـ OTC (وضع الاستراتيجية: {mode_status})**\n"
-                         f"━━━━━━━━━━━━━━━━━━━\n"
-                         f"🔹 **الزوج / السهم:** {rand_pair} | {actual_trend}\n"
-                         f"🔹 **القرار المحسوب:** {action}\n"
-                         f"🔹 **مؤشر الثقة الذكي:** {strength}%\n"
-                         f"━━━━━━━━━━━━━━━━━━━\n"
-                         f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
-                         f"🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime('%H:%M:%S')} ({rand_duration} دقيقة)")
+            auto_text = (f"تحليل زكي لـ OTC\n"
+                         f"------------------------------\n"
+                         f"{actual_trend}\n"
+                         f"الزوج/السهم: {rand_pair}\n"
+                         f"قرار شمعة: {action}\n"
+                         f"موشر سقة الزكي: {strength}%\n"
+                         f"-----------------------------\n"
+                         f"وقة دخول الصفقة: {entry_time.strftime('%H:%M:%S')}\n"
+                         f"وقة انتهاء الصفقة: {expiry_time.strftime('%H:%M:%S')} ({rand_duration} دقيقة)")
             try:
-                bot.send_message(chat_id, auto_text, reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+                bot.send_message(chat_id, auto_text, reply_markup=get_main_markup(chat_id))
             except:
                 break
             
@@ -313,10 +311,6 @@ def step_manual_current_candle(message):
 def step_manual_final(message):
     chat_id = message.chat.id
     data = user_data[chat_id]
-    prev_candles = message.text
-    current_candle = data['current_candle']
-    
-    rsi = data['rsi']
     duration = int(data['time'].split()[0])
     now = datetime.now()
     entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
@@ -324,21 +318,17 @@ def step_manual_final(message):
     
     action, strength, actual_trend = analyze_otc_trap(data['pair'], data['trend_type'], chat_id)
     
-    is_rev = reverse_mode_active.get(chat_id, False)
-    mode_status = "مفعل (عكسي 🔄)" if is_rev else "عادي"
-    
-    result_text = (f"🧠 **التحليل اليدوي للـ OTC (الوضع: {mode_status})**\n"
-                   f"━━━━━━━━━━━━━━━━━━━\n"
-                   f"🔹 **الزوج:** {data['pair']} | {actual_trend}\n"
-                   f"🔹 **الشمعة الحالية:** {current_candle}\n"
-                   f"🔹 **الشموع السابقة:** {prev_candles}\n"
-                   f"🔹 **القرار المحسوب:** {action}\n"
-                   f"🔹 **مؤشر الثقة الحي:** {strength}%\n"
-                   f"━━━━━━━━━━━━━━━━━━━\n"
-                   f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
-                   f"🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime('%H:%M:%S')}")
+    result_text = (f"تحليل زكي لـ OTC\n"
+                   f"------------------------------\n"
+                   f"{actual_trend}\n"
+                   f"الزوج/السهم: {data['pair']}\n"
+                   f"قرار شمعة: {action}\n"
+                   f"موشر سقة الزكي: {strength}%\n"
+                   f"-----------------------------\n"
+                   f"وقة دخول الصفقة: {entry_time.strftime('%H:%M:%S')}\n"
+                   f"وقة انتهاء الصفقة: {expiry_time.strftime('%H:%M:%S')} ({duration} دقيقة)")
                  
-    bot.send_message(chat_id, result_text, reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, result_text, reply_markup=get_main_markup(chat_id))
     user_data[chat_id] = {}
 
 @bot.message_handler(func=lambda message: message.text == 'إيقاف تلقائي')
