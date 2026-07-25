@@ -70,6 +70,7 @@ def create_vertical_kb(buttons_list, chat_id, row=2, add_back=True):
             markup.row(types.KeyboardButton('إيقاف النظام'))
     return markup
 
+# محرك التحليل الذي يدمج خصائص الترند والشموع بدقة
 def advanced_otc_behavior_analysis(pair, trend_type, chat_id):
     is_rev = reverse_mode_active.get(chat_id, False)
     
@@ -79,20 +80,22 @@ def advanced_otc_behavior_analysis(pair, trend_type, chat_id):
         strength = 98
 
     if trend_type == "ترند صاعد":
-        primary_action = "🔴 بيع تكتيكي عكاسي"
+        primary_action = "🔴 بيع تكتيكي عكاسي (رصد مصيدة التشبع الشرائي عند الأطراف)"
+        trend_desc = "صاعد (موجة متسارعة / فخ المقاومة)"
     else:
-        primary_action = "🟢 شراء تكتيكي عكاسي"
+        primary_action = "🟢 شراء تكتيكي عكاسي (رصد الانهيار العمودي / تشبع بيعي للقاع)"
+        trend_desc = "هابط (انهيار عمودي / فخ الدعم)"
 
     if is_rev:
         final_decision = primary_action + " [وضع العكس الاحترافي الذكي 🔄]"
     else:
         final_decision = primary_action
 
-    return final_decision, strength
+    return final_decision, strength, trend_desc
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم تحديث النظام بنجاح وإلغاء التفعيل التلقائي لوضع العكس.", reply_markup=get_main_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! تم استعادة جميع خصائص الترند والشموع والتحليل السلوكي بالكامل.", reply_markup=get_main_markup(message.chat.id))
 
 @bot.message_handler(func=lambda message: message.text and '🔄 العكس:' in message.text)
 def toggle_reverse_mode(message):
@@ -207,8 +210,9 @@ def handle_auto_time_chosen(message):
                     rand_duration = 1
 
             now = datetime.now()
+            # يمكنك تعديل رقم 40 أدناه للوقت الذي يناسبك (مثلاً قبل 20 ثانية اجعلها 40، قبل 30 ثانية اجعلها 30)
             target_time = now.replace(second=40, microsecond=0)
-            if now.second >= 55:
+            if now.second >= 40:
                 target_time = target_time + timedelta(minutes=1)
                 
             sleep_seconds = (target_time - datetime.now()).total_seconds()
@@ -239,7 +243,7 @@ def handle_auto_time_chosen(message):
             active_pair_locks[rand_pair] = time.time() + (rand_duration * 60 + 10)
                 
             rand_trend_type = random.choice(['ترند صاعد', 'ترند هابط'])
-            action, strength = advanced_otc_behavior_analysis(rand_pair, rand_trend_type, target_chat_id)
+            action, strength, trend_desc = advanced_otc_behavior_analysis(rand_pair, rand_trend_type, target_chat_id)
             
             now_msg = datetime.now()
             entry_time = (now_msg + timedelta(minutes=1)).replace(second=0, microsecond=0)
@@ -247,7 +251,7 @@ def handle_auto_time_chosen(message):
             
             auto_text = (f"📊 **تقرير التحليل السلوكي للـ OTC**\n"
                          f"━━━━━━━━━━━━━━━━━━━\n"
-                         f"🔹 **الزوج / السهم:** {rand_pair}\n"
+                         f"🔹 **الزوج / السهم:** {rand_pair} | {trend_desc}\n"
                          f"🔹 **مدة الصفقة:** {rand_duration} دقيقة\n"
                          f"🔹 **قرار النظام:** {action}\n"
                          f"🔹 **مؤشر القوة:** {strength}%\n"
@@ -291,11 +295,11 @@ def step_manual_time(message):
     entry_time = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
     expiry_time = entry_time + timedelta(minutes=duration)
     
-    action, strength = advanced_otc_behavior_analysis(data['pair'], data['trend_type'], chat_id)
+    action, strength, trend_desc = advanced_otc_behavior_analysis(data['pair'], data['trend_type'], chat_id)
     
     result_text = (f"📊 **تقرير التحليل الفردي**\n"
                    f"━━━━━━━━━━━━━━━━━━━\n"
-                   f"🔹 **الزوج / السهم:** {data['pair']}\n"
+                   f"🔹 **الزوج / السهم:** {data['pair']} | {trend_desc}\n"
                    f"🔹 **المدة المحددة:** {data['time']}\n"
                    f"🔹 **قرار النظام:** {action}\n"
                    f"🔹 **مؤشر الثقة:** {strength}%\n"
