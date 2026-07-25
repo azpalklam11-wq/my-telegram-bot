@@ -147,7 +147,7 @@ def stop_bot(message):
 def start_auto_menu(message):
     chat_id = message.chat.id
     markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True)
-    bot.send_message(chat_id, "اختر الزوج المطلوب للتشغيل التلقائي (وقت الصفقات 1-2 دقيقة):", reply_markup=markup)
+    bot.send_message(chat_id, "اختر الزوج المطلوب للتشغيل التلقائي:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == 'أوتوماتيكي')
 def step_manual_start(message):
@@ -179,7 +179,7 @@ def handle_auto_pair_selection(message):
     auto_trading_active[chat_id] = True
     auto_selected_pairs[chat_id] = selected_pair
     
-    bot.send_message(chat_id, f"🟢 تم تفعيل التشغيل التلقائي للزوج: **{selected_pair}** (بمدة 1-2 دقيقة)", reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, f"🟢 تم تفعيل التشغيل التلقائي للزوج: **{selected_pair}**", reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
     
     def background_sender():
         while auto_trading_active.get(chat_id, False):
