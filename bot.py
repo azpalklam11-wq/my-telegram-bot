@@ -14,6 +14,7 @@ bot = telebot.TeleBot(TOKEN, threaded=False, skip_pending=True)
 user_data = {}
 auto_trading_active = {}
 auto_selected_pairs = {}
+auto_selected_durations = {}
 reverse_mode_active = {}
 user_stats = {}
 active_pair_locks = {}
@@ -146,8 +147,9 @@ def stop_bot(message):
 @bot.message_handler(func=lambda message: message.text == 'تشغيل تلقائي')
 def start_auto_menu(message):
     chat_id = message.chat.id
+    user_data[chat_id] = {'auto_step': 1}
     markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True)
-    bot.send_message(chat_id, "اختر الزوج المطلوب للتشغيل التلقائي:", reply_markup=markup)
+    bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == 'أوتوماتيكي')
 def step_manual_start(message):
@@ -166,8 +168,20 @@ def step_manual_pair(message):
         bot.send_message(chat_id, "2. اختر نوع الترند:", reply_markup=create_vertical_kb(['ترند صاعد', 'ترند هابط', 'ترند متردد'], chat_id, add_back=True))
         return
 
-@bot.message_handler(func=lambda message: message.text in PAIRS or message.text == 'جميع الأزواج (عشوائي)')
-def handle_auto_pair_selection(message):
+@bot.message_handler(func=lambda message: chat_id_in_auto_step(message.chat.id, 1) and (message.text in PAIRS or message.text == 'جميع الأزواج (عشوائي)'))
+def handle_auto_pair_step(message):
+    chat_id = message.chat.id
+    text = message.text
+    
+    if chat_id in user_data and user_data[chat_id].get('auto_step') == 1:
+        user_data[chat_id]['auto_pair'] = text
+        user_data[chat_id]['auto_step'] = 2
+        times = [f"{i} دقيقة" for i in range(1, 11)]
+        bot.send_message(chat_id, "2. اختر وقت (مدة) الصفقة للتلقائي:", reply_markup=create_vertical_kb(times, chat_id, row=3, add_back=True))
+        return
+
+@bot.message_handler(func=lambda message: chat_id_in_auto_step(message.chat.id, 2) and "دقيقة" in message.text)
+def handle_auto_time_step(message):
     chat_id = message.chat.id
     
     now_ts = time.time()
@@ -175,11 +189,15 @@ def handle_auto_pair_selection(message):
         return
     last_click_time[chat_id] = now_ts
     
-    selected_pair = message.text
+    duration_val = int(message.text.split()[0])
+    selected_pair = user_data.get(chat_id, {}).get('auto_pair', 'جميع الأزواج (عشوائي)')
+    
     auto_trading_active[chat_id] = True
     auto_selected_pairs[chat_id] = selected_pair
+    auto_selected_durations[chat_id] = duration_val
     
-    bot.send_message(chat_id, f"🟢 تم تفعيل التشغيل التلقائي للزوج: **{selected_pair}**", reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    bot.send_message(chat_id, f"🟢 تم تفعيل التشغيل التلقائي بنجاح للزوج: **{selected_pair}** بمدة **{duration_val} دقيقة**", reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
+    user_data[chat_id] = {}
     
     def background_sender():
         while auto_trading_active.get(chat_id, False):
@@ -210,7 +228,7 @@ def handle_auto_pair_selection(message):
                     time.sleep(5)
                     continue
                 
-            rand_duration = random.choice([1, 2])
+            rand_duration = auto_selected_durations.get(chat_id, 2)
             active_pair_locks[rand_pair] = time.time() + (rand_duration * 60 + 30)
                 
             rand_trend_type = random.choice(['ترند صاعد', 'ترند هابط'])
@@ -230,7 +248,7 @@ def handle_auto_pair_selection(message):
                          f"🔹 **مؤشر الثقة الذكي:** {strength}%\n"
                          f"━━━━━━━━━━━━━━━━━━━\n"
                          f"⏳ **وقت دخول الصفقة:** {entry_time.strftime('%H:%M:%S')}\n"
-                         f"🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime('%H:%M:%S')}")
+                         f"🏁 **وقت انتهاء الصفقة:** {expiry_time.strftime('%H:%M:%S')} ({rand_duration} دقيقة)")
             try:
                 bot.send_message(chat_id, auto_text, reply_markup=get_main_markup(chat_id), parse_mode="Markdown")
             except:
@@ -242,6 +260,9 @@ def handle_auto_pair_selection(message):
 
 def chat_id_in_step(chat_id, step_num):
     return chat_id in user_data and user_data[chat_id].get('step') == step_num
+
+def chat_id_in_auto_step(chat_id, step_num):
+    return chat_id in user_data and user_data[chat_id].get('auto_step') == step_num
 
 @bot.message_handler(func=lambda message: chat_id_in_step(message.chat.id, 2) and message.text in ['ترند صاعد', 'ترند هابط', 'ترند متردد'])
 def step_manual_trend(message):
@@ -331,8 +352,13 @@ def handle_back(message):
     chat_id = message.chat.id
     data = user_data.get(chat_id, {})
     step = data.get('step', 0)
+    auto_step = data.get('auto_step', 0)
     
-    if step <= 1:
+    if auto_step == 2:
+        user_data[chat_id] = {'auto_step': 1}
+        markup = create_vertical_kb(['جميع الأزواج (عشوائي)'] + PAIRS, chat_id, row=2, add_back=True)
+        bot.send_message(chat_id, "1. اختر الزوج للتشغيل التلقائي:", reply_markup=markup)
+    elif auto_step == 1 or step <= 1:
         user_data[chat_id] = {}
         bot.send_message(chat_id, "القائمة الرئيسية:", reply_markup=get_main_markup(chat_id))
     elif step == 2:
