@@ -6,9 +6,8 @@ import os
 import threading
 import random
 
-# قراءة التوكن ومعرف المشرف من بيئة الاستضافة بأمان تام لـ GitHub
-TOKEN = os.getenv('TOKEN', '8540596750:AAEI0Cko_9BcGINjKZBN_u-xkDKR20OiyCw')
-ADMIN_ID = int(os.getenv('ADMIN_ID', '6513565024'))
+TOKEN = '8937685397:AAFZTpk7Lz3DQZzFkLBSD2UCE9qRSECe0WQ'
+ADMIN_ID = 6513565024
 
 bot = telebot.TeleBot(TOKEN, threaded=False, skip_pending=True)
 
@@ -99,7 +98,7 @@ def analyze_otc_trap(pair, trend_type, chat_id):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "أهلاً بك! تم ضبط البوت للعمل بنجاح على الاستضافات السحابية.", reply_markup=get_main_markup(message.chat.id))
+    bot.send_message(message.chat.id, "أهلاً بك! تم منع التكرار وضبط كافة خصائص البوت بنجاح.", reply_markup=get_main_markup(message.chat.id))
 
 @bot.message_handler(func=lambda message: message.text and '🔄 العكس:' in message.text)
 def toggle_reverse_mode(message):
@@ -369,6 +368,6 @@ def handle_back(message):
 
 while True:
     try:
-        bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        bot.polling(none_stop=True, interval=0, timeout=60)
     except Exception as e:
         time.sleep(5)
