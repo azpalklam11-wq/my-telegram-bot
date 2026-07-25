@@ -202,7 +202,7 @@ def handle_auto_time_step(message):
     def background_sender():
         while auto_trading_active.get(chat_id, False):
             now = datetime.now()
-            target_second = 0
+            target_second = 55
             current_sec = now.second
             
             if current_sec <= target_second:
